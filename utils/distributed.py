@@ -9,7 +9,7 @@ import numpy as np
 import os
 import copy
 import time, datetime
-from typing import List
+from typing import List, Tuple
 
 __author__ = 'dai'
 
@@ -70,6 +70,12 @@ class DistributedComm():
     def _async_recv(self, msg, src):
         handle = dist.irecv(msg, src = src)
         return handle, msg
+
+    def _p2p_batch_op(self, func, tensor, b_rank):
+        return dist.P2POp(func, tensor, b_rank)
+
+    def _p2p_batch_op_execute(self, op_list):
+        return dist.batch_isend_irecv(op_list)
 
     def _async_wrapper_is_completed(self, handle):
         return handle.is_completed()
@@ -149,19 +155,62 @@ class DistributedComm():
                 for dst_rank, msg in zip(comm_list, msgs)]
         return handles
 
-    def read_p2p_message(self):
+    def read_p2p_message(self, msg_shape=(1,)):
         """
         receive msg from src by sync recv - recv()
         """
         src_list = self.get_p2p_comm_group()
         msgs = []
-        temp = th.zeros(1)
+        temp = th.zeros(msg_shape)
         for src_rank in src_list:
             self._sync_recv(temp, src_rank)
             # deepcopy is necessary cause recv() changes tmep every calls,
             # leading msgs to be [last_recv, last_recv, ...]
             msgs.append((src_rank, copy.deepcopy(temp)))
         return msgs
+
+    def write_p2p_message_batch_async(self, comm_list:List[int], msgs:List[Tensor]):
+        """
+        batch async send msg - P2POps and batch_isend_irecv()
+        send msgs to comm_list respectively
+        """
+        self.set_p2p_comm_group(comm_list)
+        op_list = []
+
+        for dst_rank, msg in zip(comm_list, msgs):
+            op_list.append(self._p2p_batch_op(dist.isend, msg, dst_rank))
+        handles = self._p2p_batch_op_execute(op_list=op_list)
+        return handles
+
+    def sink_p2p_message_batch_async(self, comm_list:List[int], msgs:List[Tensor]):
+        """
+        batch async send msg - P2POps and batch_isend_irecv()
+        sink msgs to comm_list
+        """
+        self.set_p2p_comm_group(comm_list)
+        op_list = []
+
+        for dst_rank in comm_list:
+            for msg in msgs:
+                op_list.append(self._p2p_batch_op(dist.isend, msg, dst_rank))
+        handles = self._p2p_batch_op_execute(op_list=op_list)
+        return handles
+
+    def read_p2p_message_batch_async(self, per_msg_size = 1, per_msg_shape = [(1,)]) -> Tuple[List[Tuple[int, List[th.Tensor]]], None]:
+        """
+        batch async recv msg - P2POps and batch_isend_irecv()
+        """
+        src_list = self.get_p2p_comm_group()
+        msgs = {}
+        r_msgs = []
+        op_list = []
+        for src_rank in src_list:
+            msgs[src_rank] = [th.zeros(a_shape) for a_shape in per_msg_shape]
+            for i in range(per_msg_size):
+                op_list.append(self._p2p_batch_op(dist.irecv, msgs[src_rank][i], src_rank))
+            r_msgs.append((src_rank, msgs[src_rank]))
+        handles = self._p2p_batch_op_execute(op_list=op_list)
+        return r_msgs, handles
 
     # @deprecated use barrier() instead.
     #def wait_p2p_comm_notify(self, all_rank_list:List[int]):

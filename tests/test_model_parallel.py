@@ -3,7 +3,7 @@
 
 import pytest
 
-#from utils.distributed import DistributedComm
+from utils.distributed import DistributedComm
 
 import torch
 
@@ -112,5 +112,4 @@ def test_train():
 
 if __name__ == '__main__':
     train(None,None)
-    pass
 
