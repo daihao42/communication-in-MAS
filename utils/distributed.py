@@ -19,7 +19,7 @@ distributed communication through pytorch.distributed
 
 class DistributedComm():
 
-    def __init__(self, master_ip:str, master_port:str, tcp_store_ip:str, tcp_store_port:str, rank:int, world_size:int, backend='gloo', tcp_store_timeout=30) -> None:
+    def __init__(self, master_ip:str, master_port:str, tcp_store_ip:str, tcp_store_port:str, rank:int, world_size:int, backend='gloo', tcp_store_timeout=3) -> None:
         os.environ['MASTER_ADDR'] = master_ip
         os.environ['MASTER_PORT'] = master_port
         dist.init_process_group(backend = backend, rank = rank, world_size = world_size)
@@ -167,6 +167,8 @@ class DistributedComm():
             # deepcopy is necessary cause recv() changes tmep every calls,
             # leading msgs to be [last_recv, last_recv, ...]
             msgs.append((src_rank, copy.deepcopy(temp)))
+
+        #self.reset_p2p_comm_group()
         return msgs
 
     def write_p2p_message_batch_async(self, comm_list:List[int], msgs:List[Tensor]):
@@ -193,14 +195,19 @@ class DistributedComm():
         for dst_rank in comm_list:
             for msg in msgs:
                 op_list.append(self._p2p_batch_op(dist.isend, msg, dst_rank))
-        handles = self._p2p_batch_op_execute(op_list=op_list)
-        return handles
+
+        if len(op_list) != 0:
+            handles = self._p2p_batch_op_execute(op_list=op_list)
+            return handles
+        else :
+            return []
 
     def read_p2p_message_batch_async(self, per_msg_size = 1, per_msg_shape = [(1,)]) -> Tuple[List[Tuple[int, List[th.Tensor]]], None]:
         """
         batch async recv msg - P2POps and batch_isend_irecv()
         """
         src_list = self.get_p2p_comm_group()
+
         msgs = {}
         r_msgs = []
         op_list = []
@@ -209,8 +216,15 @@ class DistributedComm():
             for i in range(per_msg_size):
                 op_list.append(self._p2p_batch_op(dist.irecv, msgs[src_rank][i], src_rank))
             r_msgs.append((src_rank, msgs[src_rank]))
-        handles = self._p2p_batch_op_execute(op_list=op_list)
-        return r_msgs, handles
+
+        if len(op_list) != 0:
+            handles = self._p2p_batch_op_execute(op_list=op_list)
+
+            #clear tcpStore
+            #self.reset_p2p_comm_group()
+            return r_msgs, handles
+        else : 
+            return [],[]
 
     # @deprecated use barrier() instead.
     #def wait_p2p_comm_notify(self, all_rank_list:List[int]):
