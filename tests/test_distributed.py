@@ -274,7 +274,7 @@ def test_send_and_recv():
     """
     call _dist_send_and_recv
     """
-    _multi_processes_wrapper(world_size=16, func = _dist_send_and_recv)
+    _multi_processes_wrapper(world_size=8, func = _dist_send_and_recv)
 
 
 def _p2p_write_and_read(dist_comm, world_size):
@@ -357,6 +357,206 @@ def test_p2p_write_and_read():
     call _broadcast_set_and_wait
     """
     _multi_processes_wrapper(world_size=8, func = _p2p_write_and_read)
+
+def _p2p_write_and_read_batch(dist_comm, world_size):
+    """
+    test on the distributed read and write through p2p isend/recv
+    """
+    #dist_comm._dist.barrier()
+    dist_comm.process_wait()
+
+    '''
+    0 -> 1,3,5
+    1 -> 2,5,6
+    2 -> 3
+    3 -> 1,4
+    4 -> 6
+    5 -> 2,3
+    6 -> 0,1,2,3,4,5,7
+    7 -> 3,4,5
+
+    convert to
+
+    0 <- 6
+    1 <- 0,3,6
+    2 <- 1,5,6
+    3 <- 0,2,5,6,7
+    4 <- 3,6,7
+    5 <- 0,1,6,7
+    6 <- 1,4
+    7 <- 6
+    '''
+    dst_dict = {
+        0 : [1,3,6],
+        1 : [2,5,6],
+        2 : [3],
+        3 : [1,4],
+        4 : [6],
+        5 : [2,3],
+        6 : [0,1,2,3,4,5,7],
+        7 : [3,4,5],
+    }
+
+    hds = dist_comm.write_p2p_message_batch_async(dst_dict[dist_comm._rank],
+                                list(map(lambda x:torch.zeros(1)+dist_comm._rank,
+                                         dst_dict[dist_comm._rank])))
+    dist_comm.process_wait()
+
+    print("=======call after write =========", dist_comm._rank)
+
+    src_dict = {
+        0 : [6],
+        1 : [0,3,6],
+        2 : [1,5,6],
+        3 : [0,2,5,6,7],
+        4 : [3,6,7],
+        5 : [1,6,7],
+        6 : [0,1,4],
+        7 : [6],
+    }
+
+    res,_ =  dist_comm.read_p2p_message_batch_async()
+
+    src_res = list(map(lambda x:(x,[torch.tensor(x)]), src_dict[dist_comm._rank]))
+    print(dist_comm._rank, src_res, res)
+    assert res == src_res, \
+        "p2p random write and read failed"
+
+    #dist_comm._dist.barrier()
+    dist_comm.process_wait()
+
+def test_p2p_write_and_read_batch():
+    """
+    call _broadcast_set_and_wait
+    """
+    _multi_processes_wrapper(world_size=8, func = _p2p_write_and_read_batch)
+
+def _p2p_sink_and_read_batch(dist_comm, world_size):
+    """
+    test on the distributed read and write through p2p isend/recv
+    """
+    #dist_comm._dist.barrier()
+    dist_comm.process_wait()
+
+    '''
+    0 -> [[10,20,30], [100,200,300], [1000,2000,3000]]
+    1 -> [[11,21,31], [101,201,301], [1001,2001,3001]]
+    2 -> [[12,22,32], [102,202,302], [1002,2002,3002]]
+    3 -> [[13,23,33], [103,203,303], [1003,2003,3003]]
+    4 -> [[14,24,34], [104,204,304], [1004,2004,3004]]
+    5 -> [[15,25,35], [105,205,305], [1005,2005,3005]]
+    6 -> [[16,26,36], [106,206,306], [1006,2006,3006]]
+    7 -> [[17,27,37], [107,207,307], [1007,2007,3007]]
+
+    '''
+    param_dict = {
+            0 : [torch.Tensor([10,20,30]), torch.Tensor([100,200,300]), torch.Tensor([1000,2000,3000])],
+            1 : [torch.Tensor([11,21,31]), torch.Tensor([101,201,301]), torch.Tensor([1001,2001,3001])],
+            2 : [torch.Tensor([12,22,32]), torch.Tensor([102,202,302]), torch.Tensor([1002,2002,3002])],
+            3 : [torch.Tensor([13,23,33]), torch.Tensor([103,203,303]), torch.Tensor([1003,2003,3003])],
+            4 : [torch.Tensor([14,24,34]), torch.Tensor([104,204,304]), torch.Tensor([1004,2004,3004])],
+            5 : [torch.Tensor([15,25,35]), torch.Tensor([105,205,305]), torch.Tensor([1005,2005,3005])],
+            6 : [torch.Tensor([16,26,36]), torch.Tensor([106,206,306]), torch.Tensor([1006,2006,3006])],
+            7 : [torch.Tensor([17,27,37]), torch.Tensor([107,207,307]), torch.Tensor([1007,2007,3007])]
+    }
+
+    dst_list = [(dist_comm._rank + x) % world_size for x in range(1,4)]
+
+    hds = dist_comm.sink_p2p_message_batch_async(dst_list, param_dict[dist_comm._rank])
+
+    dist_comm.process_wait()
+
+    src_list = [(dist_comm._rank - x + world_size) % world_size for x in range(1,4)]
+
+    res_comm_group =  dist_comm.get_p2p_comm_group()
+
+    print(f"rank {dist_comm._rank} read p2p group {res_comm_group}, src_list {src_list}")
+
+    assert set(res_comm_group) == set(src_list), \
+        "sink set comm group failed"
+
+    res,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(param_dict[dist_comm._rank]),
+                                                 per_msg_shape=[(3,),(3,),(3,)])
+
+    src_res = list(map(lambda x:(x,param_dict[x]), src_list))
+    print(dist_comm._rank, src_res, res)
+
+    assert res.sort() == src_res.sort(), \
+        "sink and read failed"
+
+    #dist_comm._dist.barrier()
+    dist_comm.process_wait()
+
+def test_p2p_sink_and_read_batch():
+    """
+    call _broadcast_set_and_wait
+    """
+    _multi_processes_wrapper(world_size=8, func = _p2p_sink_and_read_batch)
+
+def _p2p_sink_and_read_batch_repeat(dist_comm, world_size):
+    """
+    test on the distributed read and write through p2p isend/recv
+    """
+    #dist_comm._dist.barrier()
+    dist_comm.process_wait()
+
+    '''
+    0 -> [[10,20,30], [100,200,300], [1000,2000,3000]]
+    1 -> [[11,21,31], [101,201,301], [1001,2001,3001]]
+    2 -> [[12,22,32], [102,202,302], [1002,2002,3002]]
+    3 -> [[13,23,33], [103,203,303], [1003,2003,3003]]
+    4 -> [[14,24,34], [104,204,304], [1004,2004,3004]]
+    5 -> [[15,25,35], [105,205,305], [1005,2005,3005]]
+    6 -> [[16,26,36], [106,206,306], [1006,2006,3006]]
+    7 -> [[17,27,37], [107,207,307], [1007,2007,3007]]
+
+    '''
+    param_dict = {
+            0 : [torch.Tensor([10,20,30]), torch.Tensor([100,200,300]), torch.Tensor([1000,2000,3000])],
+            1 : [torch.Tensor([11,21,31]), torch.Tensor([101,201,301]), torch.Tensor([1001,2001,3001])],
+            2 : [torch.Tensor([12,22,32]), torch.Tensor([102,202,302]), torch.Tensor([1002,2002,3002])],
+            3 : [torch.Tensor([13,23,33]), torch.Tensor([103,203,303]), torch.Tensor([1003,2003,3003])],
+            4 : [torch.Tensor([14,24,34]), torch.Tensor([104,204,304]), torch.Tensor([1004,2004,3004])],
+            5 : [torch.Tensor([15,25,35]), torch.Tensor([105,205,305]), torch.Tensor([1005,2005,3005])],
+            6 : [torch.Tensor([16,26,36]), torch.Tensor([106,206,306]), torch.Tensor([1006,2006,3006])],
+            7 : [torch.Tensor([17,27,37]), torch.Tensor([107,207,307]), torch.Tensor([1007,2007,3007])]
+    }
+
+    dst_list = [(dist_comm._rank + x) % world_size for x in range(1,4)]
+
+    for i in range(3):
+
+        hds = dist_comm.sink_p2p_message_batch_async(dst_list, param_dict[dist_comm._rank])
+
+        dist_comm.process_wait()
+
+        src_list = [(dist_comm._rank - x + world_size) % world_size for x in range(1,4)]
+
+        res_comm_group =  dist_comm.get_p2p_comm_group()
+
+        print(f"rank {dist_comm._rank} read p2p group {res_comm_group}, src_list {src_list}")
+
+        assert set(res_comm_group) == set(src_list), \
+            "sink set comm group failed"
+
+        res,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(param_dict[dist_comm._rank]),
+                                                     per_msg_shape=[(3,),(3,),(3,)])
+
+        src_res = list(map(lambda x:(x,param_dict[x]), src_list))
+        print(dist_comm._rank, src_res, res)
+
+        assert res.sort() == src_res.sort(), \
+            "sink and read failed"
+
+        #dist_comm._dist.barrier()
+        dist_comm.process_wait()
+
+def test_p2p_sink_and_read_batch_repeat():
+    """
+    call _broadcast_set_and_wait
+    """
+    _multi_processes_wrapper(world_size=8, func = _p2p_sink_and_read_batch_repeat)
+
 
 def _group_write_and_read(dist_comm, world_size):
     """
