@@ -176,21 +176,21 @@ def train(dist_comm, world_size):
     resnet18 = models.resnet18(pretrained=False)
 
     from torch.utils.tensorboard import SummaryWriter       
-    writer = SummaryWriter("./logs/resnet18-fed/")
+    writer = SummaryWriter("./logs/resnet18/")
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
-    resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
+    #resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
+    #resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
 
-    resnet18.to(device)
+    #resnet18.to(device)
 
-    #tmodel = TModel()
-    tmodel = resnet18
+    tmodel = TModel()
+    #tmodel = resnet18
 
     tmodel.to(device)
 
-    batch_size = 16
+    batch_size = 8
 
     trainloader = torch.utils.data.DataLoader(data_train, batch_size=batch_size,shuffle=True)
 
@@ -235,10 +235,14 @@ def train(dist_comm, world_size):
 
 
 def test_train():
-    _multi_processes_wrapper(world_size=3, func = train)
+    _multi_processes_wrapper(world_size=4, func = train)
 
 
 if __name__ == '__main__':
-    pytest.main(["-s","-v","test_distributed.py"])
+    import sys
+    world_size = 3
+    rank = int(sys.argv[1])
+    dist_comm = DistributedComm("127.0.0.1", "29700","127.0.0.1","29701", world_size, rank)
+    train(dist_comm, world_size)
 
 

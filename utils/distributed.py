@@ -19,10 +19,12 @@ distributed communication through pytorch.distributed
 
 class DistributedComm():
 
-    def __init__(self, master_ip:str, master_port:str, tcp_store_ip:str, tcp_store_port:str, rank:int, world_size:int, backend='gloo', tcp_store_timeout=3) -> None:
+    def __init__(self, master_ip:str, master_port:str, tcp_store_ip:str, tcp_store_port:str,
+                 rank:int, world_size:int, backend='gloo', group_timeout=6, tcp_store_timeout=3) -> None:
         os.environ['MASTER_ADDR'] = master_ip
         os.environ['MASTER_PORT'] = master_port
-        dist.init_process_group(backend = backend, rank = rank, world_size = world_size)
+        dist.init_process_group(backend = backend, rank = rank, world_size = world_size,
+                                timeout=datetime.timedelta(seconds=group_timeout))
 
         self._world_size = world_size
 
