@@ -14,6 +14,8 @@ import os, datetime, time
 
 import copy
 
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 def mtest_init():
     """
     test if one process initial will be ok.
@@ -29,7 +31,7 @@ def _multi_processes_distributed_wrapper(master_ip, master_port, tcp_store_ip, t
     """
     run func on multiple local distributed commucation processes
     """
-    dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size)
+    dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size,"nccl")
     func(dist_comm, world_size)
 
 def _multi_processes_wrapper(world_size, func):
