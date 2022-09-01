@@ -1,5 +1,9 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+datasets/
+logs/
+**/logs
+**/datasets
 **/__pycache__
 *.py[cod]
 *$py.class
@@ -140,8 +144,6 @@ dmypy.json
 
 # VSCode
 .vscode
-
-logs
 
 saved
 
