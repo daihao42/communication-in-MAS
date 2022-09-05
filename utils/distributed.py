@@ -44,6 +44,14 @@ class DistributedComm():
             time.sleep(1)
             self._tcp_store = dist.TCPStore(tcp_store_ip, int(tcp_store_port), world_size, False, datetime.timedelta(seconds=tcp_store_timeout))
 
+    @property
+    def backend(self):
+        return self._dist.get_backend()
+
+    @property
+    def Backend(self):
+        return self._dist.Backend
+
     def _destory_distributed_group():
         dist.destroy_process_group()
 

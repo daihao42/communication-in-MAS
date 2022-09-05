@@ -14,7 +14,11 @@ import os, datetime, time
 
 import copy
 
-#os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
+# cuda out of memory
+#device_backend = [("cpu", "gloo"), ("cuda:0", "nccl")]
+device_backend = [("cpu", "gloo")]
 
 def mtest_init():
     """
@@ -27,14 +31,14 @@ def mtest_init():
         "initial broadcast commucation_channel failed with single process."
     dist_comm._dist.destroy_process_group()
 
-def _multi_processes_distributed_wrapper(master_ip, master_port, tcp_store_ip, tcp_store_port, world_size, rank, func):
+def _multi_processes_distributed_wrapper(master_ip, master_port, tcp_store_ip, tcp_store_port, world_size, rank, func, device, backend):
     """
     run func on multiple local distributed commucation processes
     """
-    dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size,"gloo")
-    func(dist_comm, world_size)
+    dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
+    func(dist_comm, world_size, device=device)
 
-def _multi_processes_wrapper(world_size, func):
+def _multi_processes_wrapper(world_size, func, device="cpu", backend="gloo"):
     """
     multiple processes managenment
     """
@@ -42,7 +46,7 @@ def _multi_processes_wrapper(world_size, func):
     mp.set_start_method('forkserver', force=True)
     processes = []
     for rank in range(world_size):
-        p = mp.Process(target=_multi_processes_distributed_wrapper, args=("127.0.0.1", "29700","127.0.0.1","29701", world_size, rank, func))
+        p = mp.Process(target=_multi_processes_distributed_wrapper, args=("127.0.0.1", "29700","127.0.0.1","29701", world_size, rank, func, device, backend))
         p.start()
         processes.append(p)
 
@@ -52,7 +56,8 @@ def _multi_processes_wrapper(world_size, func):
     #for p in processes:
     #    p.close()
 
-def _check_channel_init(dist_comm, world_size):
+
+def _check_channel_init(dist_comm, world_size, device):
     """
     chech if channels have been initialed with ""
     """
@@ -65,13 +70,17 @@ def _check_channel_init(dist_comm, world_size):
     assert dist_comm._tcp_store_get("broadcast_{rank}".format(rank = world_size-1)) == "" , \
         "initial broadcast commucation_channel failed on rank world_size - 1."
 
-def test_multi_process_init():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_multi_process_init(device, backend):
     """
     call _check_channel_init
     """
-    _multi_processes_wrapper(world_size=8, func = _check_channel_init)
+    if(backend == "gloo"):
+        _multi_processes_wrapper(world_size=8, func = _check_channel_init, device=device, backend=backend)
+    elif(backend == "nccl"):
+        _multi_processes_wrapper(world_size=3, func = _check_channel_init, device=device, backend=backend)
 
-def _p2p_set_and_get_comm_group(dist_comm, world_size):
+def _p2p_set_and_get_comm_group(dist_comm, world_size, device):
     """
     test on p2p set commucation group, by storing list into tcpstore
     p2p_dst: src1,src2,...
@@ -103,7 +112,7 @@ def error_test_p2p_group_set_and_get():
     _multi_processes_wrapper(world_size=8, func = _p2p_set_and_get_comm_group)
 
 
-def _p2p_set_and_barrier(dist_comm, world_size):
+def _p2p_set_and_barrier(dist_comm, world_size, device):
     """
     write - notify_set - read - notify_reset
     """
@@ -200,14 +209,17 @@ def _p2p_set_and_barrier(dist_comm, world_size):
     assert dist_comm.get_p2p_comm_group() == [], \
         "p2p reset commucation group failed"
 
-
-def test_p2p_group_set_and_wait():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_p2p_group_set_and_wait(device, backend):
     """
     call _p2p_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _p2p_set_and_barrier)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _p2p_set_and_barrier, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _p2p_set_and_barrier, device=device, backend=backend)
 
-def _broadcast_set_and_get(dist_comm, world_size):
+def _broadcast_set_and_get(dist_comm, world_size, device):
     """
     test on broadcast set commucation group, by storing list into tcpstore
     broadcast_dst: src1,src2,...
@@ -235,14 +247,18 @@ def _broadcast_set_and_get(dist_comm, world_size):
     assert dist_comm.get_broadcast_comm_group() == [], \
         "broadcast reset commucation group failed"
 
-def test_broadcast_notify_set_and_wait():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_broadcast_notify_set_and_wait(device, backend):
     """
     call _broadcast_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _broadcast_set_and_get)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _broadcast_set_and_get, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _broadcast_set_and_get, device=device, backend=backend)
 
 
-def _dist_send_and_recv(dist_comm, world_size):
+def _dist_send_and_recv(dist_comm, world_size, device):
     """
     test on the dist.send() and dist.recv()
     """
@@ -271,15 +287,17 @@ def _dist_send_and_recv(dist_comm, world_size):
     #dist_comm._dist.barrier()
     dist_comm.process_wait()
 
-
-def test_send_and_recv():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_send_and_recv(device, backend):
     """
     call _dist_send_and_recv
     """
-    _multi_processes_wrapper(world_size=8, func = _dist_send_and_recv)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _dist_send_and_recv, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _dist_send_and_recv, device=device, backend=backend)
 
-
-def _p2p_write_and_read(dist_comm, world_size):
+def _p2p_write_and_read(dist_comm, world_size, device):
     """
     test on the distributed read and write through p2p isend/recv
     """
@@ -354,13 +372,17 @@ def _p2p_write_and_read(dist_comm, world_size):
     #dist_comm._dist.barrier()
     dist_comm.process_wait()
 
-def test_p2p_write_and_read():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_p2p_write_and_read(device, backend):
     """
     call _broadcast_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _p2p_write_and_read)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _p2p_write_and_read, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _p2p_write_and_read, device=device, backend=backend)
 
-def _p2p_write_and_read_batch(dist_comm, world_size):
+def _p2p_write_and_read_batch(dist_comm, world_size, device):
     """
     test on the distributed read and write through p2p isend/recv
     """
@@ -427,13 +449,17 @@ def _p2p_write_and_read_batch(dist_comm, world_size):
     #dist_comm._dist.barrier()
     dist_comm.process_wait()
 
-def test_p2p_write_and_read_batch():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_p2p_write_and_read_batch(device, backend):
     """
     call _broadcast_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _p2p_write_and_read_batch)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _p2p_write_and_read_batch, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _p2p_write_and_read_batch, device=device, backend=backend)
 
-def _p2p_sink_and_read_batch(dist_comm, world_size):
+def _p2p_sink_and_read_batch(dist_comm, world_size, device):
     """
     test on the distributed read and write through p2p isend/recv
     """
@@ -489,13 +515,17 @@ def _p2p_sink_and_read_batch(dist_comm, world_size):
     #dist_comm._dist.barrier()
     dist_comm.process_wait()
 
-def test_p2p_sink_and_read_batch():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_p2p_sink_and_read_batch(device, backend):
     """
     call _broadcast_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _p2p_sink_and_read_batch)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _p2p_sink_and_read_batch, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _p2p_sink_and_read_batch, device=device, backend=backend)
 
-def _p2p_sink_and_read_batch_repeat(dist_comm, world_size):
+def _p2p_sink_and_read_batch_repeat(dist_comm, world_size, device):
     """
     test on the distributed read and write through p2p isend/recv
     """
@@ -553,14 +583,17 @@ def _p2p_sink_and_read_batch_repeat(dist_comm, world_size):
         #dist_comm._dist.barrier()
         dist_comm.process_wait()
 
-def test_p2p_sink_and_read_batch_repeat():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_p2p_sink_and_read_batch_repeat(device, backend):
     """
     call _broadcast_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _p2p_sink_and_read_batch_repeat)
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _p2p_sink_and_read_batch_repeat, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _p2p_sink_and_read_batch_repeat, device=device, backend=backend)
 
-
-def _group_write_and_read(dist_comm, world_size):
+def _group_write_and_read(dist_comm, world_size, device):
     """
     test on the distributed read and write through isend/recv
     """
@@ -633,12 +666,15 @@ def _group_write_and_read(dist_comm, world_size):
     #dist_comm._dist.barrier()
     dist_comm.process_wait()
 
-def test_group_write_and_read():
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_group_write_and_read(device, backend):
     """
     call _broadcast_set_and_wait
     """
-    _multi_processes_wrapper(world_size=8, func = _group_write_and_read)
-
+    if backend == "gloo":
+        _multi_processes_wrapper(world_size=8, func = _group_write_and_read, device=device, backend=backend)
+    elif backend == "nccl":
+        _multi_processes_wrapper(world_size=3, func = _group_write_and_read, device=device, backend=backend)
 
 if __name__ == '__main__':
     pytest.main(["-s","-v","test_distributed.py"])
