@@ -16,8 +16,8 @@ import torchvision
 from torchvision import datasets, transforms
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+#os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 #device_backend = [("cpu", "gloo"), ("cuda:0", "nccl"), ("cuda:0", "gloo")]
 device_backend = [("cuda:0", "gloo")]
@@ -96,8 +96,9 @@ def _sink_and_recv_tensor(dist_comm, world_size, device):
 
         dist_comm.process_wait()
 
-def test_sink_and_recv_tensor():
-    _multi_processes_wrapper(world_size=8, func = _sink_and_recv_tensor)
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_sink_and_recv_tensor(device, backend):
+    _multi_processes_wrapper(world_size=8, func = _sink_and_recv_tensor, device=device, backend=backend)
 
 def _sink_and_recv_parameters(dist_comm, world_size, device):
     dist_comm.process_wait()
@@ -125,8 +126,9 @@ def _sink_and_recv_parameters(dist_comm, world_size, device):
 
         dist_comm.process_wait()
 
-def test_sink_and_recv_parameters():
-    _multi_processes_wrapper(world_size=8, func = _sink_and_recv_parameters)
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_sink_and_recv_parameters(device, backend):
+    _multi_processes_wrapper(world_size=8, func = _sink_and_recv_parameters, device=device, backend=backend)
 
 
 def _fed_avg(dist_comm, world_size, device):
@@ -147,8 +149,9 @@ def _fed_avg(dist_comm, world_size, device):
 
     #dist_comm.process_wait()
 
-def test_fed_avg():
-    _multi_processes_wrapper(world_size=4, func = _fed_avg)
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_fed_avg(device, backend):
+    _multi_processes_wrapper(world_size=4, func = _fed_avg, device=device, backend=backend)
 
 def train(dist_comm, world_size, device):
 
