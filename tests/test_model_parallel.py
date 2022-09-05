@@ -14,6 +14,14 @@ import torch.multiprocessing as mp
 
 import torchvision
 from torchvision import datasets, transforms
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
+#device_backend = [("cpu", "gloo"), ("cuda:0", "nccl"), ("cuda:0", "gloo")]
+device_backend = [("cuda:0", "gloo")]
+#device_backend = [("cuda:0", "nccl")]
 
 class TModel(torch.nn.Module):
     def __init__(self):
@@ -30,14 +38,14 @@ class TModel(torch.nn.Module):
         x = self.flatten(x)
         return self.fc(x)
 
-def _multi_processes_distributed_wrapper(master_ip, master_port, tcp_store_ip, tcp_store_port, world_size, rank, func):
+def _multi_processes_distributed_wrapper(master_ip, master_port, tcp_store_ip, tcp_store_port, world_size, rank, func, device, backend):
     """
     run func on multiple local distributed commucation processes
     """
-    dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size)
-    func(dist_comm, world_size)
+    dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
+    func(dist_comm, world_size, device=device)
 
-def _multi_processes_wrapper(world_size, func):
+def _multi_processes_wrapper(world_size, func, device="cpu", backend="gloo"):
     """
     multiple processes managenment
     """
@@ -45,7 +53,7 @@ def _multi_processes_wrapper(world_size, func):
     mp.set_start_method('forkserver', force=True)
     processes = []
     for rank in range(world_size):
-        p = mp.Process(target=_multi_processes_distributed_wrapper, args=("127.0.0.1", "29700","127.0.0.1","29701", world_size, rank, func))
+        p = mp.Process(target=_multi_processes_distributed_wrapper, args=("127.0.0.1", "29700","127.0.0.1","29701", world_size, rank, func, device, backend))
         p.start()
         processes.append(p)
 
@@ -55,12 +63,10 @@ def _multi_processes_wrapper(world_size, func):
     #for p in processes:
     #    p.close()
 
-def _sink_and_recv_tensor(dist_comm, world_size):
+def _sink_and_recv_tensor(dist_comm, world_size, device):
     dist_comm.process_wait()
-    device = "cuda:0"
-    #device = "cpu"
     tmodel = TModel()
-    p_tmodel = ModelParallel(tmodel, device)
+    p_tmodel = ModelParallel(tmodel, device, dist_comm=dist_comm)
     p_shape = [x.shape for x in tmodel.parameters()]
 
     # fedavg update
@@ -90,15 +96,13 @@ def _sink_and_recv_tensor(dist_comm, world_size):
 
         dist_comm.process_wait()
 
-def rtest_sink_and_recv_tensor():
+def test_sink_and_recv_tensor():
     _multi_processes_wrapper(world_size=8, func = _sink_and_recv_tensor)
 
-def _sink_and_recv_parameters(dist_comm, world_size):
+def _sink_and_recv_parameters(dist_comm, world_size, device):
     dist_comm.process_wait()
-    device = "cuda:0"
-    #device = "cpu"
     tmodel = TModel()
-    p_tmodel = ModelParallel(tmodel, device)
+    p_tmodel = ModelParallel(tmodel, device, dist_comm= dist_comm)
     p_shape = [x.shape for x in tmodel.parameters()]
 
     # fedavg update
@@ -108,29 +112,27 @@ def _sink_and_recv_parameters(dist_comm, world_size):
     for epoch in range(8):
 
         # !!!!! " hds = " is extremely necessary, otherwise the processes will block!!
-        hds = p_tmodel.sink_parameter(dist_comm, dst_ranks)
+        hds = p_tmodel.sink_parameter(dst_ranks)
 
         dist_comm.process_wait()
 
         #msgs,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(p_shape),
         #                                       per_msg_shape=p_shape)
 
-        msgs,handles = p_tmodel.recv_parameter(dist_comm=dist_comm)
+        msgs,handles = p_tmodel.recv_parameter()
 
         print(f"{dist_comm._rank} : ",msgs[0][0])
 
         dist_comm.process_wait()
 
-def rtest_sink_and_recv_parameters():
+def test_sink_and_recv_parameters():
     _multi_processes_wrapper(world_size=8, func = _sink_and_recv_parameters)
 
 
-def _fed_avg(dist_comm, world_size):
+def _fed_avg(dist_comm, world_size, device):
     dist_comm.process_wait()
-    device = "cuda:0"
-    #device = "cpu"
     tmodel = TModel()
-    p_tmodel = ModelParallel(tmodel, device)
+    p_tmodel = ModelParallel(tmodel, device, dist_comm=dist_comm)
     p_shape = [x.shape for x in tmodel.parameters()]
 
     # fedavg update
@@ -139,16 +141,16 @@ def _fed_avg(dist_comm, world_size):
 
     for epoch in range(8):
 
-        msgs,hds = p_tmodel.fed_avg(dist_comm=dist_comm,dst_ranks=dst_ranks)
+        msgs,hds = p_tmodel.fed_avg(dst_ranks=dst_ranks)
 
         print(msgs[0][0])
 
     #dist_comm.process_wait()
 
-def rtest_fed_avg():
+def test_fed_avg():
     _multi_processes_wrapper(world_size=4, func = _fed_avg)
 
-def train(dist_comm, world_size):
+def train(dist_comm, world_size, device):
 
     seed = dist_comm._rank
     # set random seed for CPU
@@ -173,20 +175,19 @@ def train(dist_comm, world_size):
                                train = False)
 
     import torchvision.models as models
-    resnet18 = models.resnet18(pretrained=False)
+    #resnet18 = models.resnet18(pretrained=False)
 
     from torch.utils.tensorboard import SummaryWriter       
     writer = SummaryWriter("./logs/resnet18-fed/")
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
-    resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
+    #resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
+    #resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
 
-    resnet18.to(device)
+    #resnet18.to(device)
 
-    #tmodel = TModel()
-    tmodel = resnet18
+    tmodel = TModel()
+    #tmodel = resnet18
 
     tmodel.to(device)
 
@@ -202,7 +203,7 @@ def train(dist_comm, world_size):
 
     num_epochs = 10 #训练次数
 
-    p_tmodel = ModelParallel(tmodel, device)
+    p_tmodel = ModelParallel(tmodel, device, dist_comm)
 
     for epoch in range(num_epochs):
 
@@ -231,14 +232,14 @@ def train(dist_comm, world_size):
         # fedavg update
         dst_ranks = list(range(world_size))
         dst_ranks.remove(dist_comm._rank)
-        p_tmodel.fed_avg(dist_comm=dist_comm, dst_ranks=dst_ranks)
+        p_tmodel.fed_avg(dst_ranks=dst_ranks)
 
 
-def test_train():
-    _multi_processes_wrapper(world_size=3, func = train)
-
+@pytest.mark.parametrize("device, backend", device_backend)
+def test_train(device, backend):
+    _multi_processes_wrapper(world_size=3, func = train, device=device, backend=backend)
 
 if __name__ == '__main__':
-    pytest.main(["-s","-v","test_distributed.py"])
+    pytest.main(["-s","-v","test_model_parallel.py"])
 
 
