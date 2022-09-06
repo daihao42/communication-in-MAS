@@ -33,6 +33,15 @@ class TModel(torch.nn.Module):
         x = self.flatten(x)
         return self.fc(x)
 
+def get_device():
+    if torch.cuda.is_available():
+        local_rank = int(os.environ["LOCAL_RANK"])
+        device_id = local_rank % torch.cuda.device_count()
+        torch.cuda.set_device(device_id)
+        return f"cuda:{device_id}"
+    else:
+        return "cpu"
+
 def train(dist_comm, world_size):
 
     seed = dist_comm._rank
@@ -63,7 +72,7 @@ def train(dist_comm, world_size):
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter("./logs/resnet18/")
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = get_device()
 
     #resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
     #resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
