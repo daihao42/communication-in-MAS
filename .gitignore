@@ -2,6 +2,7 @@
 __pycache__/
 datasets/
 logs/
+nohup.out
 **/logs
 **/datasets
 **/__pycache__
