@@ -44,6 +44,23 @@ class DistributedComm():
             time.sleep(1)
             self._tcp_store = dist.TCPStore(tcp_store_ip, int(tcp_store_port), world_size, False, datetime.timedelta(seconds=tcp_store_timeout))
 
+    @classmethod
+    def launch_init(clf, backend='gloo', group_timeout=30, tcp_store_timeout=30):
+
+        master_ip = os.environ['MASTER_ADDR']
+        master_port = os.environ['MASTER_PORT']
+
+        tcp_store_ip = os.environ['MASTER_ADDR']
+        tcp_store_port = str(int(os.environ['MASTER_PORT'])+1)
+
+        world_size = int(os.environ['WORLD_SIZE'])
+        local_rank = os.environ['LOCAL_RANK']
+        rank = int(os.environ['RANK'])
+
+        return clf(master_ip, master_port, tcp_store_ip, tcp_store_port,
+                    rank, world_size, backend, group_timeout, tcp_store_timeout)
+
+
     @property
     def backend(self):
         return self._dist.get_backend()
@@ -52,7 +69,7 @@ class DistributedComm():
     def Backend(self):
         return self._dist.Backend
 
-    def _destory_distributed_group():
+    def _destory_distributed_group(self):
         dist.destroy_process_group()
 
     def _group_broadcast_send(self, msg, src, group = None, async_op = False):
