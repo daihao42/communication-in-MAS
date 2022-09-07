@@ -120,7 +120,7 @@ def train(dist_comm, world_size):
             writer.add_scalar(f"Train/Loss-{dist_comm._rank}\\", loss.item(), epoch)
             writer.flush()
 
-        print('[%d, %5d] loss:%.4f'%(epoch+1, (i+1)*batch_size, loss.item()))
+        print(f'rank-{dist_comm._rank} : [%d, %5d] loss:%.4f'%(epoch+1, (i+1)*batch_size, loss.item()))
 
         # fedavg update
         dst_ranks = list(range(world_size))
