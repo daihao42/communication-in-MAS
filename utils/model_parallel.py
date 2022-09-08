@@ -71,5 +71,6 @@ class ModelParallel():
         #print(f"{dist_comm._rank} have called recv and before call barrier 2")
         #dist_comm.process_wait()
         pss = list(map(lambda x:x[1], msgs))
+        pss.append(self._parameter_decode())
         self._parameter_update(self._parameter_avg(pss))
         return msgs,hds
