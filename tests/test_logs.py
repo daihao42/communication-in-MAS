@@ -15,6 +15,8 @@ import torch.nn.functional as F
 
 import torch.multiprocessing as mp
 
+import numpy as np
+
 import torchvision
 from torchvision import datasets, transforms
 
@@ -66,18 +68,20 @@ def train(dist_comm, world_size, logger:Logger):
                                transform = transform,
                                train = False)
 
-    #import torchvision.models as models
-    #resnet18 = models.resnet18(pretrained=False)
+    import torchvision.models as models
+    resnet18 = models.resnet18(pretrained=False)
 
     device = get_device()
 
-    #resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
-    #resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
+    logger.device = device
 
-    #resnet18.to(device)
+    resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
+    resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
 
-    tmodel = TModel()
-    #tmodel = resnet18
+    resnet18.to(device)
+
+    #tmodel = TModel()
+    tmodel = resnet18
 
     tmodel.to(device)
 
@@ -91,22 +95,25 @@ def train(dist_comm, world_size, logger:Logger):
     #优化器 这里用SGD
     optimizer = torch.optim.SGD(tmodel.parameters(),lr=1e-3, momentum=0.9)
 
-    num_epochs = 3 #训练次数
+    num_epochs = 10 #训练次数
 
     p_tmodel = ModelParallel(tmodel, device, dist_comm)
 
-    for i, data in enumerate(trainloader):
-        inputs, labels = data
-        break
-    input_size = inputs[0].shape
+    first_flag = True
 
-    logger.model_summary(p_tmodel.model, input_size)
+    losses = []
 
     for epoch in range(num_epochs):
 
         for i, data in enumerate(trainloader):
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
+
+            if first_flag:
+                input_size = inputs.shape
+                logger.model_summary(p_tmodel.model, input_size)
+                logger.add_graph(p_tmodel.model, inputs.to(device))
+                first_flag = False
 
             outputs = p_tmodel.model(inputs)
             loss = criterion(outputs, labels)
@@ -121,11 +128,18 @@ def train(dist_comm, world_size, logger:Logger):
 
             optimizer.step()
 
-            logger.add_scalar(f"Train/Loss", loss.item(), (i+1)*batch_size)
+            logger.add_scalar(f"Train/Loss/{epoch}", loss.item(), (i+1)*batch_size)
+            losses.append(loss.item())
 
-        logger.INFO(f'rank-{dist_comm._rank} : [%d, %5d] loss:%.4f'%(epoch+1, (i+1)*batch_size, loss.item()))
+        logger.add_scalar(f"Train/GLoss", np.average(losses), epoch)
+        logger.add_histogram(p_tmodel.model, epoch)
+        logger.INFO(f'rank-{dist_comm._rank} : [%d, %5d] loss:%.4f'%(epoch+1, (i+1)*batch_size, np.average(losses)))
+        losses = []
 
-        logger.add_graph(p_tmodel.model, input_size)
+        # fedavg update
+        dst_ranks = list(range(world_size))
+        dst_ranks.remove(dist_comm._rank)
+        p_tmodel.fed_avg(dst_ranks=dst_ranks)
 
 
 if __name__ == '__main__':
