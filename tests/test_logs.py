@@ -165,15 +165,18 @@ def parse_args():
     parser = argparse.ArgumentParser("Testing with logs and fedavg")
     # Environment
     parser.add_argument("--no-fedavg", action="store_true", default=False, help="without fedavg algorithm")
+    return parser.parse_args()
 
 if __name__ == '__main__':
     import sys
     import os
 
+    arg_list = parse_args()
+    print(arg_list)
+
     dist_comm = DistributedComm.launch_init()
     world_size = int(os.environ["WORLD_SIZE"])
 
-    arg_list = parse_args()
     if arg_list.no_fedavg:
         logger = Logger("test_logs", f"actor_with_estimate_no_fed", dist_comm._rank)
     else:
