@@ -172,7 +172,6 @@ if __name__ == '__main__':
     import os
 
     arg_list = parse_args()
-    print(arg_list)
 
     dist_comm = DistributedComm.launch_init()
     world_size = int(os.environ["WORLD_SIZE"])
