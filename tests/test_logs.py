@@ -17,6 +17,8 @@ import torch.multiprocessing as mp
 
 import numpy as np
 
+import argparse
+
 import torchvision
 from torchvision import datasets, transforms
 
@@ -44,7 +46,7 @@ def get_device():
     else:
         return "cpu"
 
-def train(dist_comm, world_size, logger:Logger):
+def train(dist_comm, world_size, logger:Logger, no_fedavg=False):
 
     seed = dist_comm._rank
     # set random seed for CPU
@@ -88,6 +90,8 @@ def train(dist_comm, world_size, logger:Logger):
     batch_size = 8
 
     trainloader = torch.utils.data.DataLoader(data_train, batch_size=batch_size,shuffle=True)
+
+    testloader = torch.utils.data.DataLoader(data_train, batch_size=batch_size)
 
     #损失函数:这里用交叉熵
     criterion = torch.nn.CrossEntropyLoss()
@@ -136,16 +140,44 @@ def train(dist_comm, world_size, logger:Logger):
         logger.INFO(f'rank-{dist_comm._rank} : [%d, %5d] loss:%.4f'%(epoch+1, (i+1)*batch_size, np.average(losses)))
         losses = []
 
-        # fedavg update
-        dst_ranks = list(range(world_size))
-        dst_ranks.remove(dist_comm._rank)
-        p_tmodel.fed_avg(dst_ranks=dst_ranks)
+        t_loss = []
+        p_tmodel.model.eval()
+        for i, data in enumerate(trainloader):
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
 
+            outputs = p_tmodel.model(inputs)
+            loss = criterion(outputs, labels)
+            t_loss.append(loss.item())
+        logger.add_scalar(f"Train/Estimate_Loss", np.average(t_loss), epoch)
+
+        p_tmodel.model.train()
+
+        if not no_fedavg:
+            # fedavg update
+            logger.INFO("update with fedavg.")
+            dst_ranks = list(range(world_size))
+            dst_ranks.remove(dist_comm._rank)
+            p_tmodel.fed_avg(dst_ranks=dst_ranks)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser("Testing with logs and fedavg")
+    # Environment
+    parser.add_argument("--no-fedavg", action="store_true", default=False, help="without fedavg algorithm")
 
 if __name__ == '__main__':
     import sys
     import os
+
     dist_comm = DistributedComm.launch_init()
     world_size = int(os.environ["WORLD_SIZE"])
-    logger = Logger("test_logs", "actor", dist_comm._rank)
-    train(dist_comm, world_size, logger)
+
+    arg_list = parse_args()
+    if arg_list.no_fedavg:
+        logger = Logger("test_logs", f"actor_with_estimate_no_fed", dist_comm._rank)
+    else:
+        logger = Logger("test_logs", f"actor_with_estimate", dist_comm._rank)
+
+    train(dist_comm, world_size, logger, arg_list.no_fedavg)
+
