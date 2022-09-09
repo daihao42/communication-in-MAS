@@ -30,6 +30,11 @@ class Logger():
 
         self.writer = SummaryWriter(os.path.join(log_dir,"tensorboard"), str(rank_id))
 
+        self.logging = logging
+        self.INFO = self.logging.info
+        self.WARN = self.logging.warn
+        self.ERROR = self.logging.error
+
         logging.basicConfig(level=logging.DEBUG #set logging level, all log beyond level will output, DEBUG < INFO < WARN < ERROR.
                              ,filename=os.path.join(log_dir,"logs", f"{rank_id}.log") #output filename
                              ,filemode="w" #write mode, w denotes rewrite, a denotes apppend
@@ -37,6 +42,7 @@ class Logger():
                              # -8 denotes left alignment with 8 space
                              ,datefmt="%Y-%m-%d %H:%M:%S" #output time format
                              )
+
 
     @property
     def device(self):
@@ -46,21 +52,9 @@ class Logger():
     def device(self, x):
         self._device = x
 
-    def INFO(self, content):
-        logging.info(content)
-
-    def WARN(self, content):
-        logging.warning(content)
-
-    def ERROR(self, content):
-        logging.error(content)
-
-    def DEBUG(self, content):
-        logging.debug(content)
-
     def model_summary(self, model:nn.Module, input_size:Tuple, mode="train", verbose=0):
-        self.INFO("Model : "+str(model.__class__)[8:-2])
-        self.INFO(str(summary(model,input_size, mode=mode, verbose=verbose)))
+        logging.info("Model : "+str(model.__class__)[8:-2])
+        logging.info(str(summary(model,input_size, mode=mode, verbose=verbose)))
 
     def add_scalar(self, tag, value, global_step):
         self.writer.add_scalar(f"{tag}/rank_{self.rank_id}\\", value, global_step)
