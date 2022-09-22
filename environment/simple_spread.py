@@ -11,7 +11,7 @@ import numpy as np
 class Scenario():
 
     def __init__(self,num_agent = 3, max_cycles = 25, continuous_actions = False, display = False) -> None:
-        self.num_agent = num_agent
+        self._num_agent = num_agent
         self.max_cycles = max_cycles
         self.continuous_actions = continuous_actions
         self.env = self.make_env()
@@ -19,8 +19,12 @@ class Scenario():
         self.display = display
         self.last_reward = []
 
+    @property
+    def n_agents(self):
+        return self._num_agent
+
     def make_env(self):
-        return simple_spread_v2.env(N=self.num_agent, max_cycles=self.max_cycles, continuous_actions=self.continuous_actions)
+        return simple_spread_v2.env(N=self._num_agent, max_cycles=self.max_cycles, continuous_actions=self.continuous_actions)
 
     def reset(self):
         self.env.reset()
@@ -49,7 +53,7 @@ class Scenario():
             obs_n.append(self.env.observe(agent=agent))
             done_n.append(self.env.dones[agent])
 
-        reward_n = np.repeat(self.global_reward(),self.num_agent)
+        reward_n = np.repeat(self.global_reward(),self._num_agent)
         delta_reward_n = []
         for i,agent in enumerate(self.env.agents):
             delta_reward_n.append(reward_n[i] - self.last_reward[i])

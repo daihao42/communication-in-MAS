@@ -3,22 +3,28 @@
 
 __author__ = 'dai'
 
-from pettingzoo.magent import tiger_deer_v3
+from pettingzoo.magent import tiger_deer_v4
 import time
 
 
 class Scenario():
 
     def __init__(self,num_agent = 3, max_cycles = 25, continuous_actions = False, display = False) -> None:
-        self.num_agent = num_agent
+        self._num_agent = {"deer":101, "tiger":20}
         self.max_cycles = max_cycles
         self.continuous_actions = continuous_actions
         self.env = self.make_env()
-        self.action_space = self.env.action_space(agent="agent_0").n
+        self.action_space = {"deer":self.env.action_space(agent="deer_0").n,
+                             "tiger":self.env.action_space(agent="tiger_0").n}
         self.display = display
 
+    @property
+    def n_agents(self):
+        return self._num_agent
+
+
     def make_env(self):
-        return tiger_deer_v3.env(N=self.num_agent, max_cycles=self.max_cycles, continuous_actions=self.continuous_actions)
+        return tiger_deer_v4.env(max_cycles=self.max_cycles)
 
     def reset(self):
         self.env.reset()
@@ -42,7 +48,7 @@ class Scenario():
             reward_n.append(self.env.rewards[agent])
             obs_n.append(self.env.observe(agent=agent))
             done_n.append(self.env.dones[agent])
-        return obs_n, reward_n, done_n, info_n
+        return obs_n, reward_n, done_n, info_n, reward_n
 
     def state(self):
         return self.env.state()
