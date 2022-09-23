@@ -71,11 +71,11 @@ def rtest_traffic_junction(display=False):
     env.close()
 
 def rtest_tiger_deer(display=True):
-    env = envs.load("tiger_deer" + ".py").Scenario(display=display)
+    env = envs.load("tiger_deer" + ".py").Scenario(display=display, max_cycles=100000)
     env.reset()
 
-    for round in range(5):
-        for epoch in range(100):
+    for round in range(1):
+        for epoch in range(100000):
             deer_action = _random_action(env.action_space["deer"], env.n_agents["deer"])
             tiger_action = _random_action(env.action_space["tiger"], env.n_agents["tiger"])
             obs_n, reward_n, done_n, info_n, reward_n = env.step(deer_action + tiger_action)
@@ -91,9 +91,9 @@ def rtest_tiger_deer(display=True):
 
 
 def test_multi_process_simple_spread():
-    #_multi_processes_wrapper(3, rtest_simple_spread)
+    _multi_processes_wrapper(3, rtest_simple_spread)
 
-    #_multi_processes_wrapper(8, rtest_traffic_junction)
+    _multi_processes_wrapper(8, rtest_traffic_junction)
 
     _multi_processes_wrapper(4, rtest_tiger_deer)
 
