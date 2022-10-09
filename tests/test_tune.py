@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""
+#############################
+## @deprecated !
+## ray and distributed are not compatible
+#############################
+"""
+
 import sys
 sys.path.append(".")
 
@@ -21,6 +28,8 @@ import argparse
 
 import torchvision
 from torchvision import datasets, transforms
+
+from ray import tune
 
 class TModel(torch.nn.Module):
     def __init__(self):
@@ -46,7 +55,7 @@ def get_device():
     else:
         return "cpu"
 
-def train(dist_comm, world_size, logger:Logger, no_fedavg=False):
+def train(dist_comm, world_size, logger:Logger, hyper_param_config, no_fedavg=False):
 
     seed = dist_comm._rank
     # set random seed for CPU
@@ -70,24 +79,24 @@ def train(dist_comm, world_size, logger:Logger, no_fedavg=False):
                                transform = transform,
                                train = False)
 
-    import torchvision.models as models
-    resnet18 = models.resnet18(pretrained=False)
+    #import torchvision.models as models
+    #resnet18 = models.resnet18(pretrained=False)
 
     device = get_device()
 
     logger.device = device
 
-    resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
-    resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
+    #resnet18.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
+    #resnet18.fc = torch.nn.Linear(in_features=512,out_features=10,bias=True)
 
-    resnet18.to(device)
+    #resnet18.to(device)
 
-    #tmodel = TModel()
-    tmodel = resnet18
+    tmodel = TModel()
+    #tmodel = resnet18
 
     tmodel.to(device)
 
-    batch_size = 8
+    batch_size = hyper_param_config["batch_size"]
 
     trainloader = torch.utils.data.DataLoader(data_train, batch_size=batch_size,shuffle=True)
 
@@ -97,7 +106,7 @@ def train(dist_comm, world_size, logger:Logger, no_fedavg=False):
     criterion = torch.nn.CrossEntropyLoss()
 
     #优化器 这里用SGD
-    optimizer = torch.optim.SGD(tmodel.parameters(),lr=1e-3, momentum=0.9)
+    optimizer = torch.optim.SGD(tmodel.parameters(),lr=hyper_param_config["lr"], momentum=hyper_param_config["momentum"])
 
     num_epochs = 10 #训练次数
 
@@ -151,6 +160,8 @@ def train(dist_comm, world_size, logger:Logger, no_fedavg=False):
             t_loss.append(loss.item())
         logger.add_scalar(f"Train/Estimate_Loss", np.average(t_loss), epoch)
 
+        tune.report(mean_estimate_loss = np.average(t_loss))
+
         p_tmodel.model.train()
 
         if not no_fedavg:
@@ -181,5 +192,26 @@ if __name__ == '__main__':
     else:
         logger = Logger("test_logs", f"actor_with_estimate", dist_comm._rank)
 
-    train(dist_comm, world_size, logger, arg_list.no_fedavg)
+    def train_mnist(config):
+        train(dist_comm, world_size, logger, config, arg_list.no_fedavg)
+
+    from hyperopt import hp
+    from ray.tune.suggest.hyperopt import HyperOptSearch
+
+    space = {
+        "lr": hp.loguniform("lr", 1e-10, 0.1),
+        "momentum": hp.uniform("momentum", 0.1, 0.9),
+        "batch_size": hp.quniform("batch_size", 16, 64, 16)
+    }
+
+    hyperopt_search = HyperOptSearch(space, metric="mean_estimate_loss", mode="min")
+
+    tuner = tune.run(
+        train_mnist,
+        num_samples=10,
+        search_alg=hyperopt_search,
+        config=space
+    )
+    results = tuner.fit()
+    print("Best config is:", results.get_best_result().config)
 
