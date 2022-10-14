@@ -3,10 +3,37 @@
 
 import environment as envs
 from typing import List
-from threading import RLock
+import numpy as np
+import torch.multiprocessing as mp
+from torch.multiprocessing import Pipe
+import time, os
 
 from utils.distributed import DistributedComm
-from component.envWrapper import ParallelizedEnvWrapper
+
+import torch
+
+class BaseAgent:
+    def __init__(self) -> None:
+        pass
+
+    def main(self, child_pipe):
+        env = self._make_env("simple_spread", num_agents=7, max_episode_len=40, display=False)
+        obs_n = env.reset()
+
+        while True:
+            child_pipe.send(obs_n)
+            print("child agent sent observation")
+            action = child_pipe.recv()
+            print("child action get action", action)
+            obs_n, reward_n, done_n, info_n, reward_n = env.step(action)
+            print(os.getpid(), reward_n)
+            if any(done_n):
+                env.reset()
+
+    def _make_env(self, env_name, num_agents, max_episode_len, continuous_actions=False,display=False):                                                                       
+        env = envs.load(env_name + ".py").Scenario(num_agent=num_agents, max_cycles=max_episode_len, continuous_actions=continuous_actions, display=display)
+        return env                                                                               
+
 
 class ParallelizedAgent():
     """
@@ -14,31 +41,80 @@ class ParallelizedAgent():
     while they can be worked in different (parallel) envs 
     """
 
-    def __init__(self, env_list: List[ParallelizedEnvWrapper], learner_rank: int, dist_comm:DistributedComm) -> None:
-        self.lock =RLock()
-        self.envs = env_list
+    def __init__(self, learner_rank: int, dist_comm:DistributedComm, parallelism = 1, display = False) -> None:
+        self.envs = envs
         self.agent_ids = []
         self.learner_rank = learner_rank
         self.dist_comm = dist_comm
-        self.action_space = envs[0].action_space
 
-    def add_hook(self, env:ParallelizedEnvWrapper, agent_id:str):
-        self.lock.acquire()
-        try:
-            self.envs.append(env)
-            self.agent_ids.append(agent_id)
-        finally:
-            self.lock.release()
+        self.parallelism = parallelism
 
-    def _batch_take_action(self):
-        obs_batch = []
-        for env,a_id in zip(self.envs,self.agent_ids):
-            obs_batch.append(self._get_obs(env,a_id))
-        return self._remote_batch_inference(obs_batch)
+        self.display = display
 
+        self.pipes = []
+    
     def _remote_batch_inference(self, input_tensors):
-        self.dist_comm.write_p2p_message([self.learner_rank], [input_tensors])
-        return self.dist_comm.read_p2p_message(msg_shape=(len(self.agent_ids),self.action_space))
+        print("input_tensors", input_tensors.shape)
+        hds = self.dist_comm.write_p2p_message([self.learner_rank], [input_tensors])
+        #print("finish write tensors", input_tensors)
+
+        print("p2p group:",self.dist_comm.get_p2p_comm_group())
+        res = self.dist_comm.read_p2p_message(msg_shape=(3,7))
+        print("get from learner", res)
+        if len(res) == 0:
+            print("nothing get from learner")
+            return [[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]]
+        src_list = list(map(lambda x:x[0], res))
+        actions = list(map(lambda x:x[1], res))[0].numpy()
+        actions = list(map(lambda x: [int(y) for y in x], actions))
+
+        #self.dist_comm.reset_p2p_comm_group()
+        print("read_p2p_msg : ", src_list, actions)
+        return actions
+        #return [self.test_random_action() for i in range(self.parallelism)]
+
+    def run(self):
+        env = BaseAgent()
+        self.pipes = self._multi_processes_wrapper(self.parallelism, env.main)
+        obs_n_p = []
+        for i in range(10000):
+            for pi in self.pipes:
+                obs_n_p.append(pi.recv())
+            #actions = self.test_random_action(self.envs[0].action_space, self.envs[0].n_agents)
+            obs_n_p_t = torch.Tensor(np.array(obs_n_p))
+            print(obs_n_p_t)
+            actions = self._remote_batch_inference(obs_n_p_t)
+            #self.take_action(actions)
+            print("parent agent get actions", actions)
+            for pi, action in zip(self.pipes, actions):
+                pi.send(action)
+
+            obs_n_p = []
+
+    
+    def _multi_processes_wrapper(self, procs_size, func):
+        """
+        multiple processes managenment
+        """
+        mp.set_start_method("spawn")
+        #mp.set_start_method('forkserver', force=True)
+        processes = []
+        pipes = []
+        for rank in range(procs_size):
+            (parent_pipe, child_pipe) = Pipe()
+            p = mp.Process(target=func, args=(child_pipe,))
+            p.start()
+            processes.append(p)
+            pipes.append(parent_pipe)
+
+        #for p in processes:
+        #    p.join()
+
+        return pipes
+
+    @property
+    def action_space(self):
+        return 0
 
     def _get_reward(self, a_id):
         pass

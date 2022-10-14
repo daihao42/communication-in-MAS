@@ -89,7 +89,7 @@ def _sink_and_recv_tensor(dist_comm, world_size, device):
 
         #print(f"rank {dist_comm._rank} read p2p group {res_comm_group}")
 
-        msgs,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(p_shape),
+        msgs,_,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(p_shape),
                                                per_msg_shape=p_shape)
 
         #print(f"{dist_comm._rank} : ",msgs[0][0])
@@ -117,7 +117,7 @@ def _sink_and_recv_parameters(dist_comm, world_size, device):
 
         dist_comm.process_wait()
 
-        #msgs,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(p_shape),
+        #msgs,_,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(p_shape),
         #                                       per_msg_shape=p_shape)
 
         msgs,handles = p_tmodel.recv_parameter()

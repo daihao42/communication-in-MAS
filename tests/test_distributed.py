@@ -439,7 +439,7 @@ def _p2p_write_and_read_batch(dist_comm, world_size, device):
         7 : [6],
     }
 
-    res,_ =  dist_comm.read_p2p_message_batch_async()
+    res,_,_ =  dist_comm.read_p2p_message_batch_async()
 
     src_res = list(map(lambda x:(x,[torch.tensor(x)]), src_dict[dist_comm._rank]))
     print(dist_comm._rank, src_res, res)
@@ -503,7 +503,7 @@ def _p2p_sink_and_read_batch(dist_comm, world_size, device):
     assert set(res_comm_group) == set(src_list), \
         "sink set comm group failed"
 
-    res,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(param_dict[dist_comm._rank]),
+    res,_,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(param_dict[dist_comm._rank]),
                                                  per_msg_shape=[(3,),(3,),(3,)])
 
     src_res = list(map(lambda x:(x,param_dict[x]), src_list))
@@ -571,7 +571,7 @@ def _p2p_sink_and_read_batch_repeat(dist_comm, world_size, device):
         assert set(res_comm_group) == set(src_list), \
             "sink set comm group failed"
 
-        res,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(param_dict[dist_comm._rank]),
+        res,_,handle = dist_comm.read_p2p_message_batch_async(per_msg_size=len(param_dict[dist_comm._rank]),
                                                      per_msg_shape=[(3,),(3,),(3,)])
 
         src_res = list(map(lambda x:(x,param_dict[x]), src_list))

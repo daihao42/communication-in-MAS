@@ -229,7 +229,7 @@ class DistributedComm():
         else :
             return []
 
-    def read_p2p_message_batch_async(self, per_msg_size = 1, per_msg_shape = [(1,)]) -> Tuple[List[Tuple[int, List[th.Tensor]]], None]:
+    def read_p2p_message_batch_async(self, per_msg_size = 1, per_msg_shape = [(1,)]):# -> Tuple[List[Tuple[int, List[th.Tensor]]], None, List[int]]:
         """
         batch async recv msg - P2POps and batch_isend_irecv()
         """
@@ -249,9 +249,9 @@ class DistributedComm():
 
             #clear tcpStore
             #self.reset_p2p_comm_group()
-            return r_msgs, handles
+            return r_msgs, src_list, handles
         else : 
-            return [],[]
+            return [],[],[]
 
     # @deprecated use barrier() instead.
     #def wait_p2p_comm_notify(self, all_rank_list:List[int]):
