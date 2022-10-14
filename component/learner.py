@@ -23,15 +23,16 @@ class Learner:
     def inference(self):
         while True:
             print("read")
-            print("p2p group:",self.dist_comm.get_p2p_comm_group())
+            #print("p2p group:",self.dist_comm.get_p2p_comm_group())
             #if len(self.dist_comm.get_p2p_comm_group()) == 0:
                 #time.sleep(1)
             #    print("call continue")
             #    continue
 
+            #res, _, _ = self.dist_comm.read_p2p_message_batch_async(per_msg_size=1,per_msg_shape=[(3,7,42)])
             res = self.dist_comm.read_p2p_message(msg_shape=(3,7,42))
 
-            self.dist_comm.reset_p2p_comm_group()
+            #self.dist_comm.reset_p2p_comm_group()
 
             actor_list = list(map(lambda x:x[0], res))
             obs = list(map(lambda x:x[1], res))
@@ -45,6 +46,7 @@ class Learner:
 
             print("before write", actor_list, actions)
             hds = self.dist_comm.write_p2p_message(actor_list, actions)
+            #hds = self.dist_comm.write_p2p_message_batch_async(actor_list, actions)
             print("finish")
 
 
