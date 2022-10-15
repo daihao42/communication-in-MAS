@@ -56,7 +56,7 @@ class ModelParallel():
         r"""
         return handle is extremely necessary, otherwise process will block!
         """
-        msgs,handle = self.dist_comm.read_p2p_message_batch_async(per_msg_size=len(self.p_shape),
+        msgs,_,handle = self.dist_comm.read_p2p_message_batch_async(per_msg_size=len(self.p_shape),
                                                per_msg_shape=self.p_shape)
         return msgs,handle
 
