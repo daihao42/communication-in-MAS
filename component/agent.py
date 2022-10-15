@@ -19,8 +19,10 @@ class BaseAgent:
     def main(self, child_pipe):
         env = self._make_env("simple_spread", num_agents=7, max_episode_len=40, display=False)
         obs_n = env.reset()
+        reward_n = env.init_reward
 
         while True:
+            #child_pipe.send([obs_n, reward_n])
             child_pipe.send(obs_n)
             print("child agent sent observation")
             action = child_pipe.recv()
@@ -57,11 +59,9 @@ class ParallelizedAgent():
         print("input_tensors", input_tensors.shape)
         hds = self.dist_comm.write_p2p_message([self.learner_rank], [input_tensors])
         #hds = self.dist_comm.write_p2p_message_batch_async([self.learner_rank], [input_tensors])
-        #print("finish write tensors", input_tensors)
 
         print("p2p group:",self.dist_comm.get_p2p_comm_group())
         res = self.dist_comm.read_p2p_message(msg_shape=(3,7))
-        #res,_,_ = self.dist_comm.read_p2p_message_batch_async(per_msg_size=1,per_msg_shape=[(3,7)])
         print("get from learner", res)
         if len(res) == 0:
             print("nothing get from learner")
@@ -70,21 +70,20 @@ class ParallelizedAgent():
         actions = list(map(lambda x:x[1], res))[0].numpy()
         actions = list(map(lambda x: [int(y) for y in x], actions))
 
-        #self.dist_comm.reset_p2p_comm_group()
         print("read_p2p_msg : ", src_list, actions)
         return actions
-        #return [self.test_random_action() for i in range(self.parallelism)]
 
     def run(self):
         env = BaseAgent()
         self.pipes = self._multi_processes_wrapper(self.parallelism, env.main)
-        obs_n_p = []
-        for i in range(1000):
+        obs_rew_p = []
+        for i in range(100):
             for pi in self.pipes:
-                obs_n_p.append(pi.recv())
+                obs_rew_p.append(pi.recv())
             #actions = self.test_random_action(self.envs[0].action_space, self.envs[0].n_agents)
-            obs_n_p_t = torch.Tensor(np.array(obs_n_p))
-            print(obs_n_p_t)
+            #obs_n_p_t = torch.Tensor(np.array(list(map(lambda x:x[0], obs_rew_p))))
+            obs_n_p_t = torch.Tensor(np.array(obs_rew_p))
+            #print(obs_n_p_t)
             actions = self._remote_batch_inference(obs_n_p_t)
             #self.take_action(actions)
             print("parent agent get actions", actions)
@@ -92,6 +91,8 @@ class ParallelizedAgent():
                 pi.send(action)
 
             obs_n_p = []
+
+            time.sleep(1)
 
     
     def _multi_processes_wrapper(self, procs_size, func):

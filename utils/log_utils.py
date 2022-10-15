@@ -32,7 +32,7 @@ class Logger():
 
         self.logging = logging
         self.INFO = self.logging.info
-        self.WARN = self.logging.warn
+        self.WARN = self.logging.warning
         self.ERROR = self.logging.error
 
         logging.basicConfig(level=logging.DEBUG #set logging level, all log beyond level will output, DEBUG < INFO < WARN < ERROR.

@@ -36,7 +36,7 @@ class Learner:
 
             actor_list = list(map(lambda x:x[0], res))
             obs = list(map(lambda x:x[1], res))
-            print("inference", obs)
+            #print("inference", obs)
 
             if len(obs) == 0:
                 continue
@@ -73,10 +73,10 @@ class Learner:
                          observation_shape=env.env.observe(env.env.agents[0]).shape,
                          num_actions=env.action_space,                              
                          num_agents = env.n_agents) 
-        master_ip = "127.0.0.1"
-        master_port = "29700"
-        tcp_store_ip = "127.0.0.1"
-        tcp_store_port = "29701"
+        master_ip = "localhost"
+        master_port = "29500"
+        tcp_store_ip = "localhost"
+        tcp_store_port = "29501"
         world_size = world_size
         rank = rank
         backend = 'gloo'

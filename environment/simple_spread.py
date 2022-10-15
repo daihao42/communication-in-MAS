@@ -38,6 +38,10 @@ class Scenario():
 
         return obs_n
 
+    @property
+    def init_reward(self):
+        return np.repeat(self.global_reward(),self._num_agent)
+
     '''
         bug fixed: the rewards and dones are make sense only after all agents take steps
     '''

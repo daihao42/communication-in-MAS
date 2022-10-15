@@ -17,10 +17,10 @@ def test_parallelizedAgent():
     rank = arglist.rank
     world_size = arglist.world_size
 
-    master_ip = "127.0.0.1"
-    master_port = "29700"
-    tcp_store_ip = "127.0.0.1"
-    tcp_store_port = "29701"
+    master_ip = "localhost"
+    master_port = "29500"
+    tcp_store_ip = "localhost"
+    tcp_store_port = "29501"
     backend = 'gloo'
     dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
     agent = ParallelizedAgent(learner_rank=0, dist_comm=dist_comm, parallelism=3)
