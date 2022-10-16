@@ -3,7 +3,7 @@
 
 from utils.distributed import DistributedComm
 
-from algorithms.commnet import CommNet
+
 
 import environment as envs
 
@@ -12,6 +12,59 @@ import torch
 import time
 
 import numpy as np
+
+
+class ReplayBuffer :
+
+    def __init__(self, num_actors, parallelism, num_agents, buffer_size = 10000) -> None:
+        """
+        rank : parallelism : agent : deque
+        """
+        self.num_actors = num_actors
+        self.parallelism = parallelism
+        self.num_agents = num_agents
+
+        self.replay_buffer = {}
+        self.buffer_size = buffer_size
+        
+
+    def _construct_buffer(self, actor_id):
+        """
+        actor_id is rank
+        """
+        self.replay_buffer[actor_id] = [[ [] for agent in range(self.num_agents)] 
+                for para in range(self.parallelism)]
+
+    def store_transition(self, actor_list, obss, actions):
+        for i,actor_id in enumerate(actor_list):
+            if actor_id not in self.replay_buffer:
+                self._construct_buffer(actor_id=actor_id)
+            for para in range(self.parallelism):
+                for agent in range(self.num_agents):
+                    self._check_over_length(self.replay_buffer[actor_id][para][agent])
+                    self.replay_buffer[actor_id][para][agent].append((obss[i][para][agent],
+                                                                      actions[i][para][agent]))
+
+    def store_reward(self, actor_list, reward_n):
+        try:
+            for i,actor_id in enumerate(actor_list):
+                for para in range(self.parallelism):
+                    for agent in range(self.num_agents):
+                        self.replay_buffer[actor_id][para][agent][-1] = \
+                            self.replay_buffer[actor_id][para][agent][-1] \
+                            + (reward_n[i][para][agent],)
+        except:
+            print("initial ??")
+
+
+    def _check_over_length(self, buf):
+        if len(buf) > self.buffer_size:
+            buf.remove(buf[0])
+            
+    def sample(self, actor_id, batch_size=64):
+        return [[np.random.choice(self.replay_buffer[actor_id][para][agent],batch_size)
+                for agent in range(self.num_agents)] for para in range(self.parallelism)]
+
 
 class Learner:
 
@@ -24,6 +77,8 @@ class Learner:
         self.parallelism = parallelism
         self.num_agents = num_agents
         self.obs_shape = obs_shape
+
+        self.replay_buffer = ReplayBuffer(num_actors, parallelism, num_agents)
 
     def inference(self):
         while True:
@@ -39,6 +94,7 @@ class Learner:
 
             #self.dist_comm.reset_p2p_comm_group()
 
+            # [actor (random) , parallelism, agents]
             actor_list = list(map(lambda x:x[0], res))
             obs_rew = torch.Tensor(np.array(list(map(lambda x:x[1].numpy(), res)))) # shape = (actors, parallelism, agents, obs+rew shape)
             #print("inference", obs)
@@ -58,6 +114,12 @@ class Learner:
             print("before write", actor_list, actions)
             hds = self.dist_comm.write_p2p_message(actor_list, actions)
             #hds = self.dist_comm.write_p2p_message_batch_async(actor_list, actions)
+
+            self.replay_buffer.store_reward(actor_list, last_rew)
+            self.replay_buffer.store_transition(actor_list,obs,actions)
+
+            #print(self.replay_buffer.replay_buffer)
+
             print("finish")
 
 
@@ -71,27 +133,4 @@ class Learner:
         #n_action = [np.random.randint(0,action_space) for i in range(n_agents)]
         n_action = [np.random.randint(0,5) for i in range(7)]
         return n_action
-
-
-    @staticmethod
-    def test(rank, world_size):
-        env = Learner._make_env("simple_spread", num_agents=7, max_episode_len=40, display=False)
-
-        env.reset()
-
-        algorithm = CommNet(env,                                  
-                         learning_rate=1e-4,                                  
-                         observation_shape=env.env.observe(env.env.agents[0]).shape,
-                         num_actions=env.action_space,                              
-                         num_agents = env.n_agents) 
-        master_ip = "localhost"
-        master_port = "29500"
-        tcp_store_ip = "localhost"
-        tcp_store_port = "29501"
-        world_size = world_size
-        rank = rank
-        backend = 'gloo'
-        learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
-        
-        learner.inference()
 
