@@ -16,9 +16,14 @@ import numpy as np
 class Learner:
 
     def __init__(self, algorithm, master_ip, master_port,
-                 tcp_store_ip, tcp_store_port, rank, world_size, backend) -> None:
+                 tcp_store_ip, tcp_store_port, rank, world_size, backend,
+                 num_actors = 2, parallelism = 3 , num_agents = 7,obs_shape = 42) -> None:
         self.dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
         self.algorithm = algorithm
+        self.num_actors = num_actors
+        self.parallelism = parallelism
+        self.num_agents = num_agents
+        self.obs_shape = obs_shape
 
     def inference(self):
         while True:
@@ -30,16 +35,22 @@ class Learner:
             #    continue
 
             #res, _, _ = self.dist_comm.read_p2p_message_batch_async(per_msg_size=1,per_msg_shape=[(3,7,42)])
-            res = self.dist_comm.read_p2p_message(msg_shape=(3,7,42))
+            res = self.dist_comm.read_p2p_message(msg_shape=(self.parallelism,self.num_agents,self.obs_shape+1))
 
             #self.dist_comm.reset_p2p_comm_group()
 
             actor_list = list(map(lambda x:x[0], res))
-            obs = list(map(lambda x:x[1], res))
+            obs_rew = torch.Tensor(np.array(list(map(lambda x:x[1].numpy(), res)))) # shape = (actors, parallelism, agents, obs+rew shape)
             #print("inference", obs)
 
-            if len(obs) == 0:
+            if len(obs_rew) == 0:
                 continue
+
+            obs = obs_rew[:,:,:,:self.obs_shape]
+            last_rew = obs_rew[:,:,:,self.obs_shape:]
+
+            print("obs", obs.shape)
+            print("last_rew", last_rew.shape)
 
             #actions = self.algorithm.choose_action(obs[0])
             actions = [torch.Tensor([Learner.test_random_action() for i in range(3)]) for j in range(len(actor_list))]

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from copy import Error
 import environment as envs
 from typing import List
 import numpy as np
@@ -22,8 +23,7 @@ class BaseAgent:
         reward_n = env.init_reward
 
         while True:
-            #child_pipe.send([obs_n, reward_n])
-            child_pipe.send(obs_n)
+            child_pipe.send([obs_n, reward_n])
             print("child agent sent observation")
             action = child_pipe.recv()
             print("child action get action", action)
@@ -43,8 +43,8 @@ class ParallelizedAgent():
     while they can be worked in different (parallel) envs 
     """
 
-    def __init__(self, learner_rank: int, dist_comm:DistributedComm, parallelism = 1, display = False) -> None:
-        self.envs = envs
+    def __init__(self, learner_rank: int, dist_comm:DistributedComm,
+                 parallelism = 1, num_agents = 7, display = False) -> None:
         self.agent_ids = []
         self.learner_rank = learner_rank
         self.dist_comm = dist_comm
@@ -52,6 +52,8 @@ class ParallelizedAgent():
         self.parallelism = parallelism
 
         self.display = display
+
+        self.num_agents = num_agents
 
         self.pipes = []
     
@@ -74,23 +76,28 @@ class ParallelizedAgent():
         return actions
 
     def run(self):
-        env = BaseAgent()
-        self.pipes = self._multi_processes_wrapper(self.parallelism, env.main)
-        obs_rew_p = []
+        base_agent = BaseAgent()
+        self.pipes = self._multi_processes_wrapper(self.parallelism, base_agent.main)
+        obs_p = []
+        rew_p = []
         for i in range(100):
-            for pi in self.pipes:
-                obs_rew_p.append(pi.recv())
-            #actions = self.test_random_action(self.envs[0].action_space, self.envs[0].n_agents)
-            #obs_n_p_t = torch.Tensor(np.array(list(map(lambda x:x[0], obs_rew_p))))
-            obs_n_p_t = torch.Tensor(np.array(obs_rew_p))
+            for p_i in self.pipes:
+                temp = p_i.recv()
+                obs_p.append(temp[0])
+                rew_p.append(temp[1])
+            obs_t = torch.Tensor(np.array(obs_p))
+            rew_t = torch.Tensor(np.array(rew_p)).reshape(self.parallelism, self.num_agents,-1)
+            print(rew_t.shape)
+            input_t = torch.concat((obs_t, rew_t), dim=2)
             #print(obs_n_p_t)
-            actions = self._remote_batch_inference(obs_n_p_t)
+            actions = self._remote_batch_inference(input_t)
             #self.take_action(actions)
             print("parent agent get actions", actions)
             for pi, action in zip(self.pipes, actions):
                 pi.send(action)
 
-            obs_n_p = []
+            obs_p = []
+            rew_p = []
 
             time.sleep(1)
 
