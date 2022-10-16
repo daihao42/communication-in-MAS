@@ -22,7 +22,6 @@ class BaseAgent:
         reward_n = env.init_reward
 
         while True:
-            #child_pipe.send([obs_n, reward_n])
             child_pipe.send(obs_n)
             print("child agent sent observation")
             action = child_pipe.recv()
@@ -80,8 +79,6 @@ class ParallelizedAgent():
         for i in range(100):
             for pi in self.pipes:
                 obs_rew_p.append(pi.recv())
-            #actions = self.test_random_action(self.envs[0].action_space, self.envs[0].n_agents)
-            #obs_n_p_t = torch.Tensor(np.array(list(map(lambda x:x[0], obs_rew_p))))
             obs_n_p_t = torch.Tensor(np.array(obs_rew_p))
             #print(obs_n_p_t)
             actions = self._remote_batch_inference(obs_n_p_t)
@@ -90,7 +87,7 @@ class ParallelizedAgent():
             for pi, action in zip(self.pipes, actions):
                 pi.send(action)
 
-            obs_n_p = []
+            obs_rew_p = []
 
             time.sleep(1)
 
