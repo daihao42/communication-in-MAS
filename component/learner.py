@@ -3,7 +3,7 @@
 
 from utils.distributed import DistributedComm
 
-
+import torch.multiprocessing as mp
 
 import environment as envs
 
@@ -13,6 +13,7 @@ import time
 
 import numpy as np
 
+from torch.multiprocessing import Pipe
 
 class ReplayBuffer :
 
@@ -62,8 +63,23 @@ class ReplayBuffer :
             buf.remove(buf[0])
             
     def sample(self, actor_id, batch_size=64):
-        return [[np.random.choice(self.replay_buffer[actor_id][para][agent],batch_size)
-                for agent in range(self.num_agents)] for para in range(self.parallelism)]
+        return torch.ones((2,2,3))
+        #return [[np.random.choice(self.replay_buffer[actor_id][para][agent],batch_size)
+        #        for agent in range(self.num_agents)] for para in range(self.parallelism)]
+
+class Trainable:
+    def __init__(self, algorithm, num_actors = 2, parallelism = 3 ,
+                 num_agents = 7,obs_shape = 42) -> None:
+        self.algorithm = algorithm
+        self.num_actors = num_actors
+        self.parallelism = parallelism
+        self.num_agents = num_agents
+        self.obs_shape = obs_shape
+
+    def train(self, child_pipe):
+        while True:
+            data = child_pipe.recv()
+            print("training whihin data:",data)
 
 
 class Learner:
@@ -80,7 +96,8 @@ class Learner:
 
         self.replay_buffer = ReplayBuffer(num_actors, parallelism, num_agents)
 
-    def inference(self):
+    def inference(self, parent_pipe):
+        epochs = 1
         while True:
             print("read")
             #print("p2p group:",self.dist_comm.get_p2p_comm_group())
@@ -122,6 +139,13 @@ class Learner:
 
             print("finish")
 
+            #parent_pipe.send(self.replay_buffer)
+
+            epochs = epochs + 1
+            if (epochs % 10) == 0:
+                print("up training processing")
+                parent_pipe.send(self.replay_buffer.sample(actor_id=1))
+                print("finish send",self.replay_buffer.sample(actor_id=1))
 
     @staticmethod
     def _make_env(env_name, num_agents, max_episode_len, continuous_actions=False,display=False):                                                                       
@@ -130,7 +154,29 @@ class Learner:
 
     @staticmethod
     def test_random_action():
+        #np.random.seed(1)
         #n_action = [np.random.randint(0,action_space) for i in range(n_agents)]
         n_action = [np.random.randint(0,5) for i in range(7)]
         return n_action
+
+class Runable:
+    def __init__(self, algorithm, master_ip, master_port,
+                 tcp_store_ip, tcp_store_port, rank, world_size, backend,
+                 num_actors = 2, parallelism = 3 , num_agents = 7,obs_shape = 42) -> None:
+        self.learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port,
+                               rank, world_size, backend, num_actors, parallelism, num_agents, obs_shape)
+       
+        self.trainer = Trainable(algorithm,num_actors,parallelism,num_agents,obs_shape)
+
+    def run(self):
+        #mp.set_start_method("forkserver")
+        mp.set_start_method("spawn")
+        (parent_pipe, child_pipe) = Pipe()
+
+        p_train = mp.Process(target=self.trainer.train, args=(child_pipe,))
+        self.learner.inference(parent_pipe)
+        p_train.start()
+        #p.join()
+
+
 

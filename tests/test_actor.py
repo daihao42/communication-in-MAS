@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-from component.agent import ParallelizedAgent
+from component.actor import ParallelizedActor
 from utils.distributed import DistributedComm
 
 import sys
@@ -23,7 +23,7 @@ def test_parallelizedAgent():
     tcp_store_port = "29501"
     backend = 'gloo'
     dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
-    agent = ParallelizedAgent(learner_rank=0, dist_comm=dist_comm, parallelism=3)
+    agent = ParallelizedActor(learner_rank=0, dist_comm=dist_comm, parallelism=3)
     agent.run()
     #env_w = ParallelizedEnvWrapper(parallelism=3)
     #env_w.run()
