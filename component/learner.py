@@ -3,7 +3,7 @@
 
 from utils.distributed import DistributedComm
 
-from algorithms.commnet import CommNet
+
 
 import environment as envs
 
@@ -54,13 +54,17 @@ class ReplayBuffer :
                             self.replay_buffer[actor_id][para][agent][-1] \
                             + (reward_n[i][para][agent],)
         except:
-            pass
+            print("initial ??")
 
 
     def _check_over_length(self, buf):
         if len(buf) > self.buffer_size:
             buf.remove(buf[0])
             
+    def sample(self, actor_id, batch_size=64):
+        return [[np.random.choice(self.replay_buffer[actor_id][para][agent],batch_size)
+                for agent in range(self.num_agents)] for para in range(self.parallelism)]
+
 
 class Learner:
 
@@ -129,27 +133,4 @@ class Learner:
         #n_action = [np.random.randint(0,action_space) for i in range(n_agents)]
         n_action = [np.random.randint(0,5) for i in range(7)]
         return n_action
-
-
-    @staticmethod
-    def test(rank, world_size):
-        env = Learner._make_env("simple_spread", num_agents=7, max_episode_len=40, display=False)
-
-        env.reset()
-
-        algorithm = CommNet(env,                                  
-                         learning_rate=1e-4,                                  
-                         observation_shape=env.env.observe(env.env.agents[0]).shape,
-                         num_actions=env.action_space,                              
-                         num_agents = env.n_agents) 
-        master_ip = "localhost"
-        master_port = "29500"
-        tcp_store_ip = "localhost"
-        tcp_store_port = "29501"
-        world_size = world_size
-        rank = rank
-        backend = 'gloo'
-        learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
-        
-        learner.inference()
 
