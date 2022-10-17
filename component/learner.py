@@ -3,7 +3,7 @@
 
 from utils.distributed import DistributedComm
 
-
+import threading
 
 import environment as envs
 
@@ -12,7 +12,6 @@ import torch
 import time
 
 import numpy as np
-
 
 class ReplayBuffer :
 
@@ -81,6 +80,7 @@ class Learner:
         self.replay_buffer = ReplayBuffer(num_actors, parallelism, num_agents)
 
     def inference(self):
+        epochs = 1
         while True:
             print("read")
             #print("p2p group:",self.dist_comm.get_p2p_comm_group())
@@ -122,6 +122,22 @@ class Learner:
 
             print("finish")
 
+            #parent_pipe.send(self.replay_buffer)
+
+            epochs = epochs + 1
+            print("epochs : ", epochs)
+            if (epochs % 10) == 0:
+                print("up training processing")
+                data = self.replay_buffer.sample(actor_id=1)
+                t1 = threading.Thread(target=self.train,args=(data,))
+                t1.start()
+
+
+    def train(self, data):
+        print("training whihin data")
+        time.sleep(15)
+        print("training finished")
+
 
     @staticmethod
     def _make_env(env_name, num_agents, max_episode_len, continuous_actions=False,display=False):                                                                       
@@ -130,7 +146,9 @@ class Learner:
 
     @staticmethod
     def test_random_action():
+        #np.random.seed(1)
         #n_action = [np.random.randint(0,action_space) for i in range(n_agents)]
         n_action = [np.random.randint(0,5) for i in range(7)]
         return n_action
+
 

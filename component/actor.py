@@ -13,7 +13,7 @@ from utils.distributed import DistributedComm
 
 import torch
 
-class BaseAgent:
+class BaseActor:
     def __init__(self) -> None:
         pass
 
@@ -37,7 +37,7 @@ class BaseAgent:
         return env                                                                               
 
 
-class ParallelizedAgent():
+class ParallelizedActor():
     """
     these agents take actions follow a same policy
     while they can be worked in different (parallel) envs 
@@ -76,8 +76,8 @@ class ParallelizedAgent():
         return actions
 
     def run(self):
-        base_agent = BaseAgent()
-        self.pipes = self._multi_processes_wrapper(self.parallelism, base_agent.main)
+        base_actor = BaseActor()
+        self.pipes = self._multi_processes_wrapper(self.parallelism, base_actor.main)
         obs_p = []
         rew_p = []
         for i in range(100):
