@@ -35,6 +35,9 @@ class ReplayBuffer :
                 for para in range(self.parallelism)]
 
     def store_transition(self, actor_list, obss, actions):
+        '''
+        obs, action, reward, next_obs
+        '''
         for i,actor_id in enumerate(actor_list):
             if actor_id not in self.replay_buffer:
                 self._construct_buffer(actor_id=actor_id)
@@ -44,14 +47,14 @@ class ReplayBuffer :
                     self.replay_buffer[actor_id][para][agent].append((obss[i][para][agent],
                                                                       actions[i][para][agent]))
 
-    def store_reward(self, actor_list, reward_n):
+    def store_reward(self, actor_list, reward_n, next_obs):
         try:
             for i,actor_id in enumerate(actor_list):
                 for para in range(self.parallelism):
                     for agent in range(self.num_agents):
                         self.replay_buffer[actor_id][para][agent][-1] = \
                             self.replay_buffer[actor_id][para][agent][-1] \
-                            + (reward_n[i][para][agent],)
+                            + (reward_n[i][para][agent],next_obs[i][para][agent])
         except:
             print("initial ??")
 
@@ -115,7 +118,7 @@ class Learner:
             hds = self.dist_comm.write_p2p_message(actor_list, actions)
             #hds = self.dist_comm.write_p2p_message_batch_async(actor_list, actions)
 
-            self.replay_buffer.store_reward(actor_list, last_rew)
+            self.replay_buffer.store_reward(actor_list, last_rew, obs)
             self.replay_buffer.store_transition(actor_list,obs,actions)
 
             #print(self.replay_buffer.replay_buffer)
