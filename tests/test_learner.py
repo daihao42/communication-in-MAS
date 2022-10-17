@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-from component.learner import Learner, Runable
+from component.learner import Learner
 from algorithms.commnet import CommNet
 import argparse
 
@@ -30,9 +30,7 @@ def test_learner():
     world_size = world_size
     rank = rank
     backend = 'gloo'
-    #learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
+    learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
     
-    #learner.inference(None)
-    runable = Runable(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
-    runable.run()
+    learner.inference()
 
