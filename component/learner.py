@@ -25,7 +25,6 @@ class ReplayBuffer :
 
         self.replay_buffer = {}
         self.buffer_size = buffer_size
-        
 
     def _construct_buffer(self, actor_id):
         """
@@ -34,7 +33,7 @@ class ReplayBuffer :
         self.replay_buffer[actor_id] = [[ [] for agent in range(self.num_agents)] 
                 for para in range(self.parallelism)]
 
-    def store_transition(self, actor_list, obss, actions):
+    def store_transition(self, actor_list, obss, actions, _probs):
         '''
         obs, action, reward, next_obs
         '''
@@ -45,7 +44,7 @@ class ReplayBuffer :
                 for agent in range(self.num_agents):
                     self._check_over_length(self.replay_buffer[actor_id][para][agent])
                     self.replay_buffer[actor_id][para][agent].append((obss[i][para][agent],
-                                                                      actions[i][para][agent]))
+                                                                      actions[i][para][agent], _probs[i][para][agent]))
 
     def store_reward(self, actor_list, reward_n, next_obs):
         try:
@@ -111,15 +110,15 @@ class Learner:
             print("obs", obs.shape)
             print("last_rew", last_rew.shape)
 
-            #actions = self.algorithm.choose_action(obs[0])
-            actions = [torch.Tensor([Learner.test_random_action() for i in range(3)]) for j in range(len(actor_list))]
+            actions,_probs = self.algorithm.choose_action(obs[0])
+            #actions = [torch.Tensor([Learner.test_random_action() for i in range(3)]) for j in range(len(actor_list))]
 
             print("before write", actor_list, actions)
             hds = self.dist_comm.write_p2p_message(actor_list, actions)
             #hds = self.dist_comm.write_p2p_message_batch_async(actor_list, actions)
 
             self.replay_buffer.store_reward(actor_list, last_rew, obs)
-            self.replay_buffer.store_transition(actor_list,obs,actions)
+            self.replay_buffer.store_transition(actor_list,obs,actions, _probs)
 
             #print(self.replay_buffer.replay_buffer)
 

@@ -39,7 +39,7 @@ def test_learner():
     world_size = world_size
     rank = rank
     backend = 'gloo'
-    learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
+    learner = Learner(myalg, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
     
     learner.inference()
 

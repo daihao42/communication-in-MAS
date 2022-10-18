@@ -34,7 +34,7 @@ class Scenario():
             obs_n.append(self.env.observe(agent=agent))
             rew_n.append(self.env.rewards[agent])
 
-        self.last_reward = rew_n
+        self.last_reward = self.global_reward()
 
         return obs_n
 
@@ -58,13 +58,11 @@ class Scenario():
             done_n.append(self.env.dones[agent])
 
         reward_n = np.repeat(self.global_reward(),self._num_agent)
-        delta_reward_n = []
-        for i,agent in enumerate(self.env.agents):
-            delta_reward_n.append(reward_n[i] - self.last_reward[i])
+        delta_reward_n = np.repeat(self.global_reward()-self.last_reward,self._num_agent)
 
-        self.last_reward = reward_n
+        self.last_reward = self.global_reward()
         #return obs_n, delta_reward_n, done_n, info_n, reward_n
-        return obs_n, reward_n, done_n, info_n, reward_n
+        return obs_n, reward_n, done_n, info_n, delta_reward_n
 
     def bound_env(self, actions):
         pass
@@ -80,7 +78,8 @@ class Scenario():
         rew = 0
         for l in world.landmarks:
             dists = [np.sqrt(np.sum(np.square(a.state.p_pos - l.state.p_pos))) for a in world.agents]
-            rew -= max(dists)
+            #rew -= max(dists)
+            rew -= min(dists)
         return rew
 
     def state(self):
