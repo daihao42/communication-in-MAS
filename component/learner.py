@@ -150,11 +150,11 @@ class Learner:
             print("epochs : ", epochs)
             if (epochs % 40) == 0:
                 print("up training processing")
-                t1 = threading.Thread(target=self.train,args=(actor_list,epochs))
-                t1.start()
+                #t1 = threading.Thread(target=self.train,args=(actor_list,epochs))
+                #t1.start()
                 self.logger.add_scalar(f"Train/{self.rank}/Final_Reward", torch.mean(last_rew), epochs)
                 self.logger.add_scalar(f"Train/{self.rank}/Final_Distance", torch.mean(last_distance), epochs)
-                #self.train(actor_list, epochs)
+                self.train(actor_list, epochs)
 
 
     def train(self, actor_list, epochs):
