@@ -26,12 +26,13 @@ class ReplayBuffer :
         self.replay_buffer = {}
         self.buffer_size = buffer_size
 
-    def _construct_buffer(self, actor_id):
+        self.temp_last_obs_action = {}
+
+    def _construct_buffer(self):
         """
         actor_id is rank
         """
-        self.replay_buffer[actor_id] = [[ [] for agent in range(self.num_agents)] 
-                for para in range(self.parallelism)]
+        return [[ [] for agent in range(self.num_agents)] for para in range(self.parallelism)]
 
     def store_transition(self, actor_list, obss, actions, _probs):
         '''
@@ -39,24 +40,21 @@ class ReplayBuffer :
         '''
         for i,actor_id in enumerate(actor_list):
             if actor_id not in self.replay_buffer:
-                self._construct_buffer(actor_id=actor_id)
+                self.replay_buffer[actor_id] = self._construct_buffer()
             for para in range(self.parallelism):
                 for agent in range(self.num_agents):
                     self._check_over_length(self.replay_buffer[actor_id][para][agent])
                     self.replay_buffer[actor_id][para][agent].append((obss[i][para][agent],
-                                                                      actions[i][para][agent], _probs[i][para][agent]))
+                                                                      actions[i][para][agent], _probs[i][para][agent])
+                                                                     + self.temp_last_obs_action[actor_id][para][agent][0])
+        self.temp_last_obs_action = {}
 
     def store_reward(self, actor_list, reward_n, next_obs):
-        try:
-            for i,actor_id in enumerate(actor_list):
-                for para in range(self.parallelism):
-                    for agent in range(self.num_agents):
-                        self.replay_buffer[actor_id][para][agent][-1] = \
-                            self.replay_buffer[actor_id][para][agent][-1] \
-                            + (reward_n[i][para][agent],next_obs[i][para][agent])
-        except:
-            print("initial ??")
-
+        for i,actor_id in enumerate(actor_list):
+            self.temp_last_obs_action[actor_id] = self._construct_buffer()
+            for para in range(self.parallelism):
+                for agent in range(self.num_agents):
+                    self.temp_last_obs_action[actor_id][para][agent].append((reward_n[i][para][agent],next_obs[i][para][agent]))
 
     def _check_over_length(self, buf):
         if len(buf) > self.buffer_size:
@@ -70,7 +68,7 @@ class ReplayBuffer :
                 batch_size = m_batch_size
                 for agent in range(self.num_agents):
                     if(batch_size > len(self.replay_buffer[actor_id][para][agent]) - 1):
-                        batch_size = len(self.replay_buffer[actor_id][para][agent]) - 2
+                        batch_size = len(self.replay_buffer[actor_id][para][agent]) - 1
                     sample_data.append(self.replay_buffer[actor_id][para][agent][:batch_size])
                     self.replay_buffer[actor_id][para][agent] = self.replay_buffer[actor_id][para][agent][batch_size:]
         return sample_data
