@@ -35,9 +35,9 @@ def test_learner():
                         rank=rank) 
 
     master_ip = "localhost"
-    master_port = "29500"
+    master_port = "29700"
     tcp_store_ip = "localhost"
-    tcp_store_port = "29501"
+    tcp_store_port = "29701"
     world_size = world_size
     rank = rank
     backend = 'gloo'
