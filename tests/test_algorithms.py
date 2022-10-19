@@ -39,7 +39,7 @@ def test_algorithm():
     buffer = []
 
     epoch = 0
-    for epoch in range(1000000):
+    for epoch in range(1000):
         #print("obs shape",np.array(obs_n).shape)
         action, _probs = myalg.choose_action(obs_n)
         action2, _probs2 = myalg.choose_action(obs_n)

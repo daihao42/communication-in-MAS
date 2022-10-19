@@ -62,15 +62,23 @@ class ReplayBuffer :
         if len(buf) > self.buffer_size:
             buf.remove(buf[0])
             
-    def sample(self, actor_id, batch_size=64):
-        return [[np.random.choice(self.replay_buffer[actor_id][para][agent],batch_size)
-                for agent in range(self.num_agents)] for para in range(self.parallelism)]
-
+    def sample(self, actor_list, batch_size=64):
+        sample_data = []
+        m_batch_size = batch_size
+        for actor_id in actor_list:
+            for para in range(self.parallelism):
+                batch_size = m_batch_size
+                for agent in range(self.num_agents):
+                    if(batch_size > len(self.replay_buffer[actor_id][para][agent]) - 1):
+                        batch_size = len(self.replay_buffer[actor_id][para][agent]) - 1
+                    sample_data.append(self.replay_buffer[actor_id][para][agent][:batch_size])
+                    self.replay_buffer[actor_id][para][agent] = self.replay_buffer[actor_id][para][agent][batch_size:]
+        return sample_data
 
 class Learner:
 
     def __init__(self, algorithm, master_ip, master_port,
-                 tcp_store_ip, tcp_store_port, rank, world_size, backend,
+                 tcp_store_ip, tcp_store_port, rank, world_size, backend, logger,
                  num_actors = 2, parallelism = 3 , num_agents = 7,obs_shape = 42, num_actions=5) -> None:
         self.dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
         self.algorithm = algorithm
@@ -81,6 +89,10 @@ class Learner:
         self.num_actions = num_actions
 
         self.replay_buffer = ReplayBuffer(num_actors, parallelism, num_agents)
+
+        self.logger = logger
+
+        self.rank = rank
 
     def inference(self):
         epochs = 1
@@ -93,7 +105,7 @@ class Learner:
             #    continue
 
             #res, _, _ = self.dist_comm.read_p2p_message_batch_async(per_msg_size=1,per_msg_shape=[(3,7,42)])
-            res = self.dist_comm.read_p2p_message(msg_shape=(self.parallelism,self.num_agents,self.obs_shape+1))
+            res = self.dist_comm.read_p2p_message(msg_shape=(self.parallelism,self.num_agents,self.obs_shape+2))
 
             #self.dist_comm.reset_p2p_comm_group()
 
@@ -106,7 +118,8 @@ class Learner:
                 continue
 
             obs = obs_rew[:,:,:,:self.obs_shape]
-            last_rew = obs_rew[:,:,:,self.obs_shape:]
+            last_distance = obs_rew[:,:,:,self.obs_shape:self.obs_shape+1]
+            last_rew = obs_rew[:,:,:,self.obs_shape+1:]
 
             print("obs", obs.shape)
             print("last_rew", last_rew.shape)
@@ -121,9 +134,13 @@ class Learner:
             hds = self.dist_comm.write_p2p_message(actor_list, [torch.Tensor(a) for a in actions])
             #hds = self.dist_comm.write_p2p_message_batch_async(actor_list, actions)
 
-            print(actions.shape)
-            self.replay_buffer.store_reward(actor_list, last_rew, obs)
-            self.replay_buffer.store_transition(actor_list,obs,actions, _probs)
+            #print(actions.shape)
+            self.replay_buffer.store_reward(actor_list, last_rew.cpu().numpy(), obs.cpu().numpy())
+            self.replay_buffer.store_transition(actor_list,obs.cpu().numpy(),actions, _probs)
+
+
+            self.logger.add_scalar(f"Train/{self.rank}/Reward", torch.mean(last_rew), epochs)
+            self.logger.add_scalar(f"Train/{self.rank}/Distance", torch.mean(last_distance), epochs)
 
             #print(self.replay_buffer.replay_buffer)
 
@@ -135,16 +152,22 @@ class Learner:
             print("epochs : ", epochs)
             if (epochs % 40) == 0:
                 print("up training processing")
-                data = self.replay_buffer.sample(actor_id=1)
-                t1 = threading.Thread(target=self.train,args=(data,))
-                t1.start()
+                #t1 = threading.Thread(target=self.train,args=(actor_list,))
+                #t1.start()
+                self.logger.add_scalar(f"Train/{self.rank}/Final_Reward", torch.mean(last_rew), epochs)
+                self.logger.add_scalar(f"Train/{self.rank}/Final_Distance", torch.mean(last_distance), epochs)
+                self.train(actor_list, epochs)
 
 
-    def train(self, data):
+    def train(self, actor_list, epochs):
         print("training whihin data")
-        time.sleep(15)
-        print("training finished")
+        sample_data = self.replay_buffer.sample(actor_list=actor_list)
+        for data in sample_data:
+            critic_loss, actor_loss = self.algorithm.train(data)
+            self.logger.add_scalar(f"Train/{self.rank}/Critic_Loss", critic_loss, epochs)
+            self.logger.add_scalar(f"Train/{self.rank}/Actor_Loss", actor_loss, epochs)
 
+        print("training finished")
 
     @staticmethod
     def _make_env(env_name, num_agents, max_episode_len, continuous_actions=False,display=False):                                                                       

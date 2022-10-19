@@ -7,6 +7,8 @@ from algorithms.commnet import CommNet
 from algorithms.proposed import MyAlgorithm
 import argparse
 
+from utils.log_utils import Logger
+
 def test_learner():
     parse = argparse.ArgumentParser("Communication for MAS")
     parse.add_argument("--rank", type=int, default=0, help="dist rank")
@@ -39,7 +41,8 @@ def test_learner():
     world_size = world_size
     rank = rank
     backend = 'gloo'
-    learner = Learner(myalg, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
+    logger = Logger("parallel_learner", f"ac_network", rank)
+    learner = Learner(myalg, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend, logger)
     
     learner.inference()
 

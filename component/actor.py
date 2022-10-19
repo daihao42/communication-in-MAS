@@ -18,16 +18,19 @@ class BaseActor:
         pass
 
     def main(self, child_pipe):
-        env = self._make_env("simple_spread", num_agents=7, max_episode_len=40, display=False)
+        num_agents = 7
+        max_episode_len=40
+        env = self._make_env("simple_spread", num_agents=num_agents, max_episode_len=max_episode_len, display=False)
         obs_n = env.reset()
         reward_n = env.init_reward
+        delta_reward_n = [0 for i in range(num_agents)]
 
         while True:
-            child_pipe.send([obs_n, reward_n])
+            child_pipe.send([obs_n, reward_n, delta_reward_n])
             print("child agent sent observation")
             action = child_pipe.recv()
             print("child action get action", action)
-            obs_n, reward_n, done_n, info_n, reward_n = env.step(action)
+            obs_n, reward_n, done_n, info_n, delta_reward_n = env.step(action)
             print(os.getpid(), reward_n)
             if any(done_n):
                 env.reset()
@@ -57,17 +60,13 @@ class ParallelizedActor():
 
         self.pipes = []
     
-    def _remote_batch_inference(self, input_tensors):
-        print("input_tensors", input_tensors.shape)
-        hds = self.dist_comm.write_p2p_message([self.learner_rank], [input_tensors])
-        #hds = self.dist_comm.write_p2p_message_batch_async([self.learner_rank], [input_tensors])
-
-        print("p2p group:",self.dist_comm.get_p2p_comm_group())
-        res = self.dist_comm.read_p2p_message(msg_shape=(3,7))
+    def _remote_batch_inference(self):
+        #print("p2p group:",self.dist_comm.get_p2p_comm_group())
+        res = self.dist_comm.read_p2p_message(msg_shape=(self.parallelism,self.num_agents))
         print("get from learner", res)
         if len(res) == 0:
             print("nothing get from learner")
-            return [[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]]
+            return []
         src_list = list(map(lambda x:x[0], res))
         actions = list(map(lambda x:x[1], res))[0].numpy()
         actions = list(map(lambda x: [int(y) for y in x], actions))
@@ -75,29 +74,42 @@ class ParallelizedActor():
         print("read_p2p_msg : ", src_list, actions)
         return actions
 
-    def run(self):
+    def run(self, max_epochs):
         base_actor = BaseActor()
         self.pipes = self._multi_processes_wrapper(self.parallelism, base_actor.main)
         obs_p = []
         rew_p = []
-        for i in range(100):
+        delta_rew_p = []
+        for i in range(max_epochs):
             for p_i in self.pipes:
                 temp = p_i.recv()
                 obs_p.append(temp[0])
                 rew_p.append(temp[1])
+                delta_rew_p.append(temp[2]) 
             obs_t = torch.Tensor(np.array(obs_p))
             rew_t = torch.Tensor(np.array(rew_p)).reshape(self.parallelism, self.num_agents,-1)
+            delta_rew_t = torch.Tensor(np.array(delta_rew_p)).reshape(self.parallelism, self.num_agents,-1)
             print(rew_t.shape)
-            input_t = torch.concat((obs_t, rew_t), dim=2)
+            input_t = torch.concat((obs_t, rew_t, delta_rew_t), dim=2)
             #print(obs_n_p_t)
-            actions = self._remote_batch_inference(input_t)
+
+            hds = self.dist_comm.write_p2p_message([self.learner_rank], [input_t])
+            #hds = self.dist_comm.write_p2p_message_batch_async([self.learner_rank], [input_tensors])
+
+            actions = []
             #self.take_action(actions)
-            print("parent agent get actions", actions)
+            while(len(actions) == 0):
+                actions = self._remote_batch_inference()
+                print("parent agent get actions", actions)
+                if(len(actions) == 0):
+                    time.sleep(1)
+
             for pi, action in zip(self.pipes, actions):
                 pi.send(action)
 
             obs_p = []
             rew_p = []
+            delta_rew_p = []
 
             #time.sleep(1)
 

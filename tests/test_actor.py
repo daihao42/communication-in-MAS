@@ -13,6 +13,7 @@ def test_parallelizedAgent():
     parse = argparse.ArgumentParser("Communication for MAS")
     parse.add_argument("--rank", type=int, default=0, help="dist rank")
     parse.add_argument("--world-size", type=int, default=1, help="dist world_size")
+    parse.add_argument("--max-epochs", type=int, default=1000, help="max epochs")
     arglist = parse.parse_args()
     rank = arglist.rank
     world_size = arglist.world_size
@@ -24,7 +25,7 @@ def test_parallelizedAgent():
     backend = 'gloo'
     dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
     agent = ParallelizedActor(learner_rank=0, dist_comm=dist_comm, parallelism=3)
-    agent.run()
+    agent.run(arglist.max_epochs)
     #env_w = ParallelizedEnvWrapper(parallelism=3)
     #env_w.run()
 
