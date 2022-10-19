@@ -48,11 +48,13 @@ class MyAlgorithm():
 
         self.lr = learning_rate
 
+        self.device = th.device(f'cuda:{rank}' if th.cuda.is_available() else 'cpu')
+
         self.actor = DNet(observation_shape, num_actions)
+        self.actor.to(self.device)
 
         self.critic = DNet(observation_shape, 1)
-
-        self.device = th.device(f'cuda{rank}' if th.cuda.is_available() else 'cpu')
+        self.critic.to(self.device)
 
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),lr=learning_rate)
         self.actor_loss_func = F.cross_entropy
@@ -65,8 +67,10 @@ class MyAlgorithm():
         _logits = self.actor(x)
         _probs = th.softmax(_logits, dim=1)
         if(greedy):                                                                   
-            return th.argmax(_probs,dim=1,keepdim=True).cpu().detach().numpy(), _probs.cpu().detach().numpy()
-        return th.multinomial(_probs, num_samples=1).reshape(-1).cpu().detach().numpy(), _probs.cpu().detach().numpy()
+            #return th.argmax(_probs,dim=1,keepdim=True).cpu().detach().numpy(), _probs.cpu().detach().numpy()
+            return th.argmax(_probs,dim=1,keepdim=True), _probs.cpu().detach().numpy()
+        #return th.multinomial(_probs, num_samples=1).reshape(-1)#.cpu().detach().numpy(), _probs.cpu().detach().numpy()
+        return th.multinomial(_probs, num_samples=1).reshape(-1), _probs.cpu().detach().numpy()
 
     def train(self, sample, gamma = 0.99):
 
@@ -86,12 +90,12 @@ class MyAlgorithm():
         # for simple_spread
         #print(n_rew)
 
-        discounted_ep_rs = torch.Tensor(self._discount_and_norm_rewards(n_rew, gamma)).reshape((-1,1))
+        discounted_ep_rs = torch.Tensor(self._discount_and_norm_rewards(n_rew, gamma)).reshape((-1,1)).to(self.device)
         #print(discounted_ep_rs)
 
         ### update critic ###
-        value = self.critic(torch.Tensor(n_obs).reshape((-1,self.observation_shape[0])))
-        next_value = self.critic(torch.Tensor(n_next_obs).reshape((-1,self.observation_shape[0])))
+        value = self.critic(torch.Tensor(n_obs).reshape((-1,self.observation_shape[0])).to(self.device))
+        next_value = self.critic(torch.Tensor(n_next_obs).reshape((-1,self.observation_shape[0])).to(self.device))
 
         critic_loss = self.critic_loss_func(discounted_ep_rs + gamma * value, next_value)
         self.critic_optimizer.zero_grad()

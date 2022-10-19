@@ -71,13 +71,14 @@ class Learner:
 
     def __init__(self, algorithm, master_ip, master_port,
                  tcp_store_ip, tcp_store_port, rank, world_size, backend,
-                 num_actors = 2, parallelism = 3 , num_agents = 7,obs_shape = 42) -> None:
+                 num_actors = 2, parallelism = 3 , num_agents = 7,obs_shape = 42, num_actions=5) -> None:
         self.dist_comm = DistributedComm(master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend=backend)
         self.algorithm = algorithm
         self.num_actors = num_actors
         self.parallelism = parallelism
         self.num_agents = num_agents
         self.obs_shape = obs_shape
+        self.num_actions = num_actions
 
         self.replay_buffer = ReplayBuffer(num_actors, parallelism, num_agents)
 
@@ -110,13 +111,17 @@ class Learner:
             print("obs", obs.shape)
             print("last_rew", last_rew.shape)
 
-            actions,_probs = self.algorithm.choose_action(obs[0])
+            actions,_probs = self.algorithm.choose_action(obs.reshape((-1,self.obs_shape)))
             #actions = [torch.Tensor([Learner.test_random_action() for i in range(3)]) for j in range(len(actor_list))]
 
+            actions = actions.reshape((len(actor_list),self.parallelism,self.num_agents)).cpu().detach().numpy()
+            _probs = _probs.reshape((len(actor_list),self.parallelism,self.num_agents,self.num_actions))
+
             print("before write", actor_list, actions)
-            hds = self.dist_comm.write_p2p_message(actor_list, actions)
+            hds = self.dist_comm.write_p2p_message(actor_list, [torch.Tensor(a) for a in actions])
             #hds = self.dist_comm.write_p2p_message_batch_async(actor_list, actions)
 
+            print(actions.shape)
             self.replay_buffer.store_reward(actor_list, last_rew, obs)
             self.replay_buffer.store_transition(actor_list,obs,actions, _probs)
 
@@ -128,7 +133,7 @@ class Learner:
 
             epochs = epochs + 1
             print("epochs : ", epochs)
-            if (epochs % 10) == 0:
+            if (epochs % 40) == 0:
                 print("up training processing")
                 data = self.replay_buffer.sample(actor_id=1)
                 t1 = threading.Thread(target=self.train,args=(data,))

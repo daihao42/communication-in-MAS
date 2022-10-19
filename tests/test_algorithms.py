@@ -48,9 +48,9 @@ def test_algorithm():
         logger.add_scalar("Inference/Stable", stable, epoch)
         #print("action", action)
 
-        buffer.append((obs_n, action, _probs))
+        buffer.append((obs_n, action.cpu().detach().numpy(), _probs))
 
-        obs_n, reward_n, done_n, info_n, delta_reward_n = env.step(action)
+        obs_n, reward_n, done_n, info_n, delta_reward_n = env.step(action.cpu().detach().numpy())
 
         buffer[-1] = buffer[-1] + (delta_reward_n, obs_n)
 
