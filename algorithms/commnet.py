@@ -11,8 +11,6 @@ import random
 
 from torch.autograd import Variable
 
-from models.ActorNet import ActorNet
-
 class CommModel(nn.Module):
 
     def __init__(self, env,  observation_shape, num_actions, num_agents, hidden_shape, device) -> None:

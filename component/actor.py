@@ -99,7 +99,7 @@ class ParallelizedActor():
             obs_p = []
             rew_p = []
 
-            time.sleep(1)
+            #time.sleep(1)
 
     
     def _multi_processes_wrapper(self, procs_size, func):
@@ -122,18 +122,3 @@ class ParallelizedActor():
 
         return pipes
 
-    @property
-    def action_space(self):
-        return 0
-
-    def _get_reward(self, a_id):
-        pass
-
-    def _get_obs(self, env, a_id):
-        pass
-
-    def _get_comm(self, a_id):
-        pass
-
-    def save_rollout(self):
-        pass

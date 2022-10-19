@@ -4,6 +4,7 @@
 import pytest
 from component.learner import Learner
 from algorithms.commnet import CommNet
+from algorithms.proposed import MyAlgorithm
 import argparse
 
 def test_learner():
@@ -23,6 +24,14 @@ def test_learner():
                      observation_shape=env.env.observe(env.env.agents[0]).shape,
                      num_actions=env.action_space,                              
                      num_agents = env.n_agents) 
+
+    myalg = MyAlgorithm(env,
+                        learning_rate=1e-4,                                  
+                        observation_shape=env.env.observe(env.env.agents[0]).shape,
+                        num_actions=env.action_space,                              
+                        num_agents = env.n_agents,
+                        rank=rank) 
+
     master_ip = "localhost"
     master_port = "29500"
     tcp_store_ip = "localhost"
@@ -30,7 +39,7 @@ def test_learner():
     world_size = world_size
     rank = rank
     backend = 'gloo'
-    learner = Learner(algorithm, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
+    learner = Learner(myalg, master_ip, master_port, tcp_store_ip, tcp_store_port, rank, world_size, backend)
     
     learner.inference()
 
