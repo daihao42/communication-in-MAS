@@ -70,7 +70,7 @@ class ReplayBuffer :
                 batch_size = m_batch_size
                 for agent in range(self.num_agents):
                     if(batch_size > len(self.replay_buffer[actor_id][para][agent]) - 1):
-                        batch_size = len(self.replay_buffer[actor_id][para][agent]) - 1
+                        batch_size = len(self.replay_buffer[actor_id][para][agent]) - 2
                     sample_data.append(self.replay_buffer[actor_id][para][agent][:batch_size])
                     self.replay_buffer[actor_id][para][agent] = self.replay_buffer[actor_id][para][agent][batch_size:]
         return sample_data

@@ -102,9 +102,9 @@ class MyAlgorithm():
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        print("value", value)
-        print("next_value", next_value)
-        print("discounted_ep_rs", discounted_ep_rs)
+        #print("value", value)
+        #print("next_value", next_value)
+        #print("discounted_ep_rs", discounted_ep_rs)
 
         with torch.no_grad():
             td_error = discounted_ep_rs + gamma * next_value - value
@@ -127,7 +127,7 @@ class MyAlgorithm():
         #actor_loss.backward(torch.ones_like(actor_loss))
         actor_loss.backward()
         self.actor_optimizer.step()
-        print("actor_loss",actor_loss)
+        #print("actor_loss",actor_loss)
         '''
 
         _logits = self.actor(torch.Tensor(n_obs).reshape(-1,self.observation_shape[0])).reshape(-1)
