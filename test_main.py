@@ -10,7 +10,8 @@ if __name__ == '__main__':
     #pytest.main(["-s","-v","tests/test_distributed.py"])
     #pytest.main(["-s","-v","tests/test_model_parallel.py"])
     #pytest.main(["-s","-v","tests/test_environments.py"])
+    pytest.main(["-s","-v","tests/test_logs.py"])
     #pytest.main(["-s","-v","tests/test_agent.py"])
     #pytest.main(["-s","-v","tests/test_learner.py"])
-    pytest.main(["-s","-v","tests/test_algorithms.py"])
+    #pytest.main(["-s","-v","tests/test_algorithms.py"])
  
