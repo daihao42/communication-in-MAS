@@ -34,7 +34,7 @@ class DNet(nn.Module):
 
 class MyAlgorithm():
 
-    def __init__(self, env, learning_rate, observation_shape, num_actions, num_agents, rank) -> None:
+    def __init__(self, env, learning_rate, observation_shape, num_actions, num_agents, rank, device) -> None:
 
         self.observation_shape = observation_shape
 

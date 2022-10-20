@@ -9,6 +9,17 @@ import argparse,time
 
 from utils.log_utils import Logger
 
+import torch
+
+def get_device(rank):
+    if torch.cuda.is_available():
+        device_id = rank % torch.cuda.device_count()
+        torch.cuda.set_device(device_id)
+        return f"cuda:{device_id}"
+    else:
+        return "cpu"
+
+
 def test_learner():
     parse = argparse.ArgumentParser("Communication for MAS")
     parse.add_argument("--rank", type=int, default=0, help="dist rank")
@@ -28,12 +39,17 @@ def test_learner():
                      num_actions=env.action_space,                              
                      num_agents = env.n_agents) 
 
+
+    device = get_device(rank)
+
+
     myalg = MyAlgorithm(env,
                         learning_rate=1e-4,                                  
                         observation_shape=env.env.observe(env.env.agents[0]).shape,
                         num_actions=env.action_space,                              
                         num_agents = env.n_agents,
-                        rank=rank) 
+                        rank=rank,
+                        device=device) 
 
     master_ip = "localhost"
     master_port = "29700"
