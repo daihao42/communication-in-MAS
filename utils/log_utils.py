@@ -19,10 +19,10 @@ from typing import Tuple
 
 class Logger():
 
-    def __init__(self, experimental_name:str, model_name:str, rank_id:int, log_dir:str="./logs") -> None:
+    def __init__(self, experimental_name:str, model_name:str, rank_id:int, log_time = str(int(time.time())), log_dir:str="./logs") -> None:
         self.rank_id = rank_id
 
-        log_dir = os.path.join(log_dir, experimental_name, model_name, str(int(time.time())))
+        log_dir = os.path.join(log_dir, experimental_name, model_name, log_time)
 
         os.makedirs(log_dir, exist_ok=True)
 

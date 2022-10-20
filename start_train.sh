@@ -10,10 +10,11 @@ do
   sleep 1
 done
 
+log_time=`date +%s`
 
 for i in {0..$(($learner_num-1))}
 do
   sleep 1
-  nohup python test_learner_inc.py --rank $i --world-size $world_size > logs/nohups/learner-$i.out &
+  nohup python test_learner_inc.py --rank $i --world-size $world_size --log-time $log_time > logs/nohups/learner-$i.out &
 done
 

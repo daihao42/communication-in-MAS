@@ -15,3 +15,6 @@ do
   echo "rank_"$i 
   echo "learner_rank_"$((($i-$learner_num)/$actor_per_learner))
 done
+
+log_time=`date +%s`
+echo $log_time
