@@ -13,13 +13,24 @@ from utils.log_utils import Logger
 
 import torch
 
+def get_device(rank):
+    if torch.cuda.is_available():
+        device_id = rank % torch.cuda.device_count()
+        torch.cuda.set_device(device_id)
+        return f"cuda:{device_id}"
+    else:
+        return "cpu"
+
+
 def test_algorithm():
 
     rank = 0
 
-    logger = Logger("test_algorithm", f"ac_network", rank)
+    logger = Logger("noac", f"ac_network", rank)
 
     env = Learner._make_env("simple_spread", num_agents=7, max_episode_len=40, display=False)
+
+    device = get_device(0)
 
     obs_n = env.reset()
 
@@ -34,12 +45,13 @@ def test_algorithm():
                         observation_shape=env.env.observe(env.env.agents[0]).shape,
                         num_actions=env.action_space,                              
                         num_agents = env.n_agents,
-                        rank=rank) 
+                        rank=rank,
+                        device=device) 
 
     buffer = []
 
     epoch = 0
-    for epoch in range(1000):
+    for epoch in range(1000000):
         #print("obs shape",np.array(obs_n).shape)
         action, _probs = myalg.choose_action(obs_n)
         action2, _probs2 = myalg.choose_action(obs_n)
@@ -72,6 +84,4 @@ def test_algorithm():
 
 
     env.close()
-
-
 
