@@ -189,9 +189,9 @@ class NOAC():
             for neighbor_id in range(len(n_neighbor_msgs[i])):
                 neighbor_msg_action = torch.cat([n_neighbor_msgs[i][neighbor_id][:self.message_size],torch.Tensor(n_probs[i]).to(self.device)]).detach()
                 # no pesudo action
-                #neighbor_msg_action = n_neighbor_msgs[i][neighbor_id].detach()
+                # neighbor_msg_action = n_neighbor_msgs[i][neighbor_id].detach()
                 # no encoder msg
-                #neighbor_msg_action = torch.cat([new_msg[:self.message_size],torch.Tensor(n_probs[i]).to(self.device)]).detach()
+                # neighbor_msg_action = torch.cat([new_msg[:self.message_size],torch.Tensor(n_probs[i]).to(self.device)]).detach()
 
                 #print(f"neighbor_msg_action:{neighbor_msg_action}")
 
