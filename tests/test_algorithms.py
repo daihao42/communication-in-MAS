@@ -33,7 +33,7 @@ def test_noac_train():
     obs_n = env.reset()
 
 
-    logger = Logger("noac", f"noac-no-encode-msg", rank)
+    logger = Logger("noac", f"noac", rank)
     neighbors = 3
     noacs = [NOAC(env,
                 learning_rate=5e-4,
